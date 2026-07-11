@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify endpoint coverage, types, and dependencies
+        run: npm run verify
+
       - name: Select Xcode 26
         run: |
           set -euo pipefail

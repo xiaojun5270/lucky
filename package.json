@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "generate:endpoints": "node scripts/generate-endpoints.mjs",
+    "check:endpoints": "node scripts/generate-endpoints.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run check:endpoints && npm run typecheck && npm audit --audit-level=low",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",

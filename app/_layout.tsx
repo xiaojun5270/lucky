@@ -27,6 +27,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="services/[kind]" options={{ title: '服务详情', headerBackTitle: '返回' }} />
+          <Stack.Screen name="modules/[module]" options={{ title: '模块接口', headerBackTitle: '返回' }} />
+          <Stack.Screen name="endpoints/[id]" options={{ title: '接口调试', headerBackTitle: '返回' }} />
         </Stack>}
     </QueryClientProvider>
   </GestureHandlerRootView>;

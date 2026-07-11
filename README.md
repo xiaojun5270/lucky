@@ -10,6 +10,23 @@
 - 反向代理、DDNS、Docker 容器和 SSL 证书列表
 - DDNS/SSL 手动同步和 Docker 启停/重启二次确认
 - Lucky 全局日志和安全退出
+- 文档全部 45 个模块、328 条端点、448 个 HTTP 方法的接口注册表
+- 模块搜索、端点浏览、动态路径参数、查询参数和 JSON 请求体调试
+- JSON、文本、空响应和二进制下载响应解析
+- DELETE、配置写入、Docker、证书、同步、重启和 WOL 等高风险操作二次确认
+
+接口目录由 `docs/Lucky_API_Endpoints.json` 自动生成：
+
+```bash
+npm run generate:endpoints
+npm run check:endpoints
+```
+
+完整验证（接口覆盖率、TypeScript、依赖漏洞）：
+
+```bash
+npm run verify
+```
 
 ## 开发
 

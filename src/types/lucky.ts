@@ -38,3 +38,32 @@ export type LuckyDashboard = {
 };
 
 export type LuckyServiceKind = 'webservice' | 'ddns' | 'docker' | 'ssl';
+
+export type LuckyHttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+
+export type LuckyEndpointDefinition = {
+  id: string;
+  path: string;
+  methods: LuckyHttpMethod[];
+  module: string;
+  source: string;
+  notes: string;
+  requiresSuffix: boolean;
+  pathVariables: string[];
+};
+
+export type LuckyModuleDefinition = {
+  key: string;
+  label: string;
+  endpointCount: number;
+  methodCount: number;
+};
+
+export type LuckyEndpointCall = {
+  endpoint: LuckyEndpointDefinition;
+  method: LuckyHttpMethod;
+  pathValues?: Record<string, string>;
+  suffix?: string;
+  query?: LuckyRecord;
+  body?: unknown;
+};

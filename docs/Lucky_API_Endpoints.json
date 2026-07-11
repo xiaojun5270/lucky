@@ -1,0 +1,2298 @@
+[
+  {
+    "path": "/LoginPageConfig",
+    "methods": "GET",
+    "module": "base",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/baseconfigure",
+    "methods": "GET/PUT",
+    "module": "baseconfigure",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cloudflared/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "cloudflared",
+    "source": "lucky_cloudflared-B-SRIJzs.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cloudflared/list",
+    "methods": "GET/POST/PUT",
+    "module": "cloudflared",
+    "source": "lucky_cloudflared-B-SRIJzs.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cloudflared/list/",
+    "methods": "GET",
+    "module": "cloudflared",
+    "source": "lucky_cloudflared-B-SRIJzs.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cloudflared/logs",
+    "methods": "GET",
+    "module": "cloudflared",
+    "source": "lucky_cloudflared-B-SRIJzs.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cloudflared/orderadjustment",
+    "methods": "PUT",
+    "module": "cloudflared",
+    "source": "lucky_cloudflared-B-SRIJzs.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/OWASPCoreRuleset",
+    "methods": "GET",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/instancelist",
+    "methods": "GET",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/instanceorderadjustment",
+    "methods": "PUT",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/list",
+    "methods": "GET/POST/PUT",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/list/",
+    "methods": "GET",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/coraza/logs",
+    "methods": "GET",
+    "module": "coraza",
+    "source": "lucky_coraza-SeSYFu48.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/dojobs",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/enable",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/expressioncheck",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/groups",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/groups/collapsed",
+    "methods": "PUT",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/groups/collapsed/states",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/groups/orderadjustment",
+    "methods": "PUT",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/groups/taskcount",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/lastlogs",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/list",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/logs",
+    "methods": "GET",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/cron/taskgrouporderupdate",
+    "methods": "PUT",
+    "module": "cron",
+    "source": "lucky_panel-CHJL_oLj.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns",
+    "methods": "DELETE/POST/PUT",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/configure",
+    "methods": "GET/PUT",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/enable",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/expanded",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/getipfromcmdtest",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/ipsectionexpanded",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/lastlogs",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/logs",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/manualSync/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/odhcpdclients",
+    "methods": "GET",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/recordOrderadjustment/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/task/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/taskorderadjustment",
+    "methods": "PUT",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddns/webhooktest",
+    "methods": "POST",
+    "module": "ddns",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ddnstasklist",
+    "methods": "GET",
+    "module": "ddnstasklist",
+    "source": "lucky_ddns-CSjxdSl-.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/dlnaservice/configure",
+    "methods": "GET/PUT",
+    "module": "dlnaservice",
+    "source": "lucky_panel-CqbDbvUx.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/dlnaservice/lastlogs",
+    "methods": "GET",
+    "module": "dlnaservice",
+    "source": "lucky_panel-CqbDbvUx.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/dlnaservice/logs",
+    "methods": "GET",
+    "module": "dlnaservice",
+    "source": "lucky_panel-CqbDbvUx.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/dlnaservice/status",
+    "methods": "GET",
+    "module": "dlnaservice",
+    "source": "lucky_panel-CqbDbvUx.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backup/cancel",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backups",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backups/all",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backups/download.tar.gz",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backups/restore",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/backups/upload",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/logs",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/${e}/ps",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/backup",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/backup/status",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/config",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/containers-for-cron",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/discover",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/dockerfile",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/down",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/down-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/projects",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/read-file",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/restart",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/restore",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/start",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/stop",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/stop-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/up",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/up-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/update-config",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/compose/update-dockerfile",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/config",
+    "methods": "GET/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/container-groups",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/container-groups/collapsed",
+    "methods": "PUT",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/container-groups/collapsed/states",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/container-groups/count",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/container-groups/order",
+    "methods": "PUT",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers",
+    "methods": "GET/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/commit",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/compose-config",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/copy",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/edit",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/export",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/chmod",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/compress",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/compress-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/copy",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/decompress",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/decompress-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/download",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/list",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/mkdir",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/preview-archive",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/read",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/rename",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/search",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/touch",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/upload",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/files/write",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/label",
+    "methods": "DELETE/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/logs",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/pause",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/processes",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/rename",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/restart",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/start",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/stats",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/stats-cached",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/stop",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/unpause",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/upgrade",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/${e}/upgrade-check",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/order-mapping",
+    "methods": "GET/PUT",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/set-group",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/stats-cached",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/containers/switch-version",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/disk-usage",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/${e}",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/${e}/filesystem",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/${e}/history",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/${e}/tag",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/${e}/tags",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/backup-tag",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/build",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/build-from-git",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/build-from-zip",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/containers",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/import",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/load",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/pull",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/pull-async",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/pull-with-backup",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/push",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/remove",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/remove-saved-digest",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/search",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/upgrade-check",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/upgrade-containers",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/upgrade-dismiss",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/images/upgrade-status",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/info",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/labels",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/labels/${e}/containers",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/logs",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/monitor/status",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/networks",
+    "methods": "GET/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/networks/${e}",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/prune",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/registry/mirrors",
+    "methods": "DELETE/GET/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/self-container",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/tasks",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/tasks/${e}",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/version",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes",
+    "methods": "GET/POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}/backup",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}/backup/cancel",
+    "methods": "DELETE",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}/backups",
+    "methods": "DELETE/GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}/backups/restore",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/${e}/backups/upload",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/backup/status",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/export",
+    "methods": "GET",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/docker/volumes/import",
+    "methods": "POST",
+    "module": "docker",
+    "source": "lucky_docker-jAUx4aGG.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/frp/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "frp",
+    "source": "lucky_panel-DYX1CPcY.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/frp/list",
+    "methods": "GET/POST/PUT",
+    "module": "frp",
+    "source": "lucky_panel-DYX1CPcY.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/frp/list/",
+    "methods": "GET",
+    "module": "frp",
+    "source": "lucky_panel-DYX1CPcY.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/frp/logs",
+    "methods": "GET",
+    "module": "frp",
+    "source": "lucky_panel-DYX1CPcY.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/frp/orderadjustment",
+    "methods": "PUT",
+    "module": "frp",
+    "source": "lucky_panel-DYX1CPcY.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ftpserver/configure",
+    "methods": "GET/PUT",
+    "module": "ftpserver",
+    "source": "lucky_panel-Bpuke0IM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ftpserver/lastlogs",
+    "methods": "GET",
+    "module": "ftpserver",
+    "source": "lucky_panel-Bpuke0IM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ftpserver/logs",
+    "methods": "GET",
+    "module": "ftpserver",
+    "source": "lucky_panel-Bpuke0IM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ftpserver/status",
+    "methods": "GET",
+    "module": "ftpserver",
+    "source": "lucky_panel-Bpuke0IM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/icon?",
+    "methods": "GET/POST*",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/icons",
+    "methods": "GET",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/logs",
+    "methods": "GET",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/search",
+    "methods": "GET",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/sources",
+    "methods": "GET/POST/PUT",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/iconlib/sources/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "iconlib",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/info",
+    "methods": "GET",
+    "module": "info",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/avalidDBFiles",
+    "methods": "GET",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/configure",
+    "methods": "GET/PUT",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/dbfile",
+    "methods": "DELETE",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/instanceorderadjustment",
+    "methods": "PUT",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/item",
+    "methods": "DELETE/POST/PUT",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/item/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/items",
+    "methods": "GET",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/logs",
+    "methods": "GET",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipdb/query",
+    "methods": "GET",
+    "module": "ipdb",
+    "source": "lucky_panel-6oYYYezP.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/autorecordipconf",
+    "methods": "GET/PUT",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/list",
+    "methods": "GET",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/list/",
+    "methods": "GET",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/list/subrulelist/",
+    "methods": "GET",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/listlite",
+    "methods": "GET",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipfliter/oneclickrecord",
+    "methods": "GET",
+    "module": "ipfliter",
+    "source": "lucky_ipfilter-DTNpbCPI.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ipregtest",
+    "methods": "GET",
+    "module": "ipregtest",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/login",
+    "methods": "POST",
+    "module": "login",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/logout",
+    "methods": "PUT",
+    "module": "logout",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/logs",
+    "methods": "GET",
+    "module": "logs",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/lucky/service",
+    "methods": "PUT",
+    "module": "lucky",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/modules/list",
+    "methods": "GET",
+    "module": "modules",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/netinterfaces",
+    "methods": "GET",
+    "module": "netinterfaces",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/oauth/login",
+    "methods": "POST",
+    "module": "oauth",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/oauth/status",
+    "methods": "GET",
+    "module": "oauth",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/oauth/tmpcode",
+    "methods": "POST",
+    "module": "oauth",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/oauth/userinfo",
+    "methods": "GET",
+    "module": "oauth",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforward",
+    "methods": "DELETE/POST/PUT",
+    "module": "portforward",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforward/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "portforward",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforward/configure",
+    "methods": "GET/PUT",
+    "module": "portforward",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforward/enable",
+    "methods": "GET",
+    "module": "portforward",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforward/ruleorderadjustment",
+    "methods": "PUT",
+    "module": "portforward",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforwards",
+    "methods": "GET",
+    "module": "portforwards",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/portforwards_lite",
+    "methods": "GET",
+    "module": "portforwards_lite",
+    "source": "lucky_portforward-BrHj6HGH.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/globalconfig",
+    "methods": "GET/PUT",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/itemorderadjustment",
+    "methods": "PUT",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/lastlogs",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/logs",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/remote/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/remotelist",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/remotelist/option",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/remotelistlite",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_index.js,lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/115pan/authcheck/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/115pan/authurl",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/115pan/authuserlist",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/115pan/user",
+    "methods": "DELETE",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/alipan/authcheck/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/alipan/authurl",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/alipan/authuserlist",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/alipan/user",
+    "methods": "DELETE",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/baidupan/authcheck/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/baidupan/authurl",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/baidupan/authuserlist",
+    "methods": "GET",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/rclone/third/baidupan/user",
+    "methods": "DELETE",
+    "module": "rclone",
+    "source": "lucky_rclone-CIdK4S8P.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/reboot_program",
+    "methods": "GET",
+    "module": "reboot_program",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/restoreconfigureconfirm",
+    "methods": "GET",
+    "module": "restoreconfigureconfirm",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/flush",
+    "methods": "PUT",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/lastlogs",
+    "methods": "GET",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/logs",
+    "methods": "GET",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/manualsync/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/setting",
+    "methods": "GET/PUT",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/sslorderadjustment",
+    "methods": "PUT",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/ssl/syncclients",
+    "methods": "GET",
+    "module": "ssl",
+    "source": "lucky_panel-Aq4cJakT.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/status",
+    "methods": "GET",
+    "module": "status",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/aliyunpan_auth",
+    "methods": "GET",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/aliyunpan_auth_check/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/enable",
+    "methods": "GET",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/itemorderadjustment",
+    "methods": "PUT",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/lastlogs",
+    "methods": "GET",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/list",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/litelist",
+    "methods": "GET",
+    "module": "storagemanagement",
+    "source": "lucky_index.js,lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/storagemanagement/logs",
+    "methods": "GET",
+    "module": "storagemanagement",
+    "source": "lucky_storagemanagement-CXb-qK4e.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stun/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "stun",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stun/configure",
+    "methods": "GET/PUT",
+    "module": "stun",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stun/ruleorderadjustment",
+    "methods": "PUT",
+    "module": "stun",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stunrule",
+    "methods": "DELETE/POST/PUT",
+    "module": "stunrule",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stunrule/enable",
+    "methods": "GET",
+    "module": "stunrule",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stunrule/webhooktest",
+    "methods": "POST",
+    "module": "stunrule",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stunrulelist",
+    "methods": "GET",
+    "module": "stunrulelist",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/stunrulelist_lite",
+    "methods": "GET",
+    "module": "stunrulelist_lite",
+    "source": "lucky_stun-CpXo-EtM.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/third/filebrowser/configure",
+    "methods": "GET/PUT",
+    "module": "third",
+    "source": "lucky_panel-CEqq_vxt.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/third/filebrowser/lastlogs",
+    "methods": "GET",
+    "module": "third",
+    "source": "lucky_panel-CEqq_vxt.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/third/filebrowser/logs",
+    "methods": "GET",
+    "module": "third",
+    "source": "lucky_panel-CEqq_vxt.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/third/filebrowser/resetadmin",
+    "methods": "GET",
+    "module": "third",
+    "source": "lucky_panel-CEqq_vxt.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/thirdPartyAuthManager/config",
+    "methods": "GET/PUT",
+    "module": "thirdPartyAuthManager",
+    "source": "lucky_thirdPartyAuthManager-DZlqhJJJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/thirdPartyAuthManager/list",
+    "methods": "GET/POST/PUT",
+    "module": "thirdPartyAuthManager",
+    "source": "lucky_thirdPartyAuthManager-DZlqhJJJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/thirdPartyAuthManager/list/",
+    "methods": "GET",
+    "module": "thirdPartyAuthManager",
+    "source": "lucky_thirdPartyAuthManager-DZlqhJJJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/thirdPartyAuthManager/logs",
+    "methods": "GET",
+    "module": "thirdPartyAuthManager",
+    "source": "lucky_thirdPartyAuthManager-DZlqhJJJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/thirdPartyAuthManager/orderadjustment",
+    "methods": "PUT",
+    "module": "thirdPartyAuthManager",
+    "source": "lucky_thirdPartyAuthManager-DZlqhJJJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/twofapassword",
+    "methods": "GET",
+    "module": "twofapassword",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/update/cancel",
+    "methods": "GET",
+    "module": "update",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/update/comfire",
+    "methods": "PUT",
+    "module": "update",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/v2l",
+    "methods": "POST",
+    "module": "v2l",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webdav/configure",
+    "methods": "GET/PUT",
+    "module": "webdav",
+    "source": "lucky_panel-DJAXww5r.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webdav/lastlogs",
+    "methods": "GET",
+    "module": "webdav",
+    "source": "lucky_panel-DJAXww5r.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webdav/logs",
+    "methods": "GET",
+    "module": "webdav",
+    "source": "lucky_panel-DJAXww5r.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webdav/status",
+    "methods": "GET",
+    "module": "webdav",
+    "source": "lucky_panel-DJAXww5r.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/cgi",
+    "methods": "POST",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/cgi/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/cgi/list",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/groups",
+    "methods": "DELETE/GET/POST/PUT",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/groups/orderadjustment",
+    "methods": "PUT",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/groups/subrulecount",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/lastlogs",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/lightpanel/configtemplate",
+    "methods": "POST",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/logs",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/modulesettings",
+    "methods": "PUT",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/modulesettings/frontend",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/rule/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/ruleorderadjustment",
+    "methods": "PUT",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/rules",
+    "methods": "GET/POST",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/rules_lite",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/tipinfo",
+    "methods": "GET",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webservice/tipread",
+    "methods": "PUT",
+    "module": "webservice",
+    "source": "lucky_reverseproxy-C9rQD8QJ.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/connectionorderadjustment",
+    "methods": "PUT",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/connections",
+    "methods": "GET/POST/PUT",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/connections/",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/connections/test",
+    "methods": "POST",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/globalshortcuts",
+    "methods": "GET/PUT",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/logs",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/security",
+    "methods": "GET/PUT",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/security/agreement",
+    "methods": "POST",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/security/check2fa",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/security/verify2fa",
+    "methods": "POST",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/sessions",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/sessions/",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/sftp/",
+    "methods": "GET/PUT/DELETE*",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/shells",
+    "methods": "GET",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/webterminal/splitlayout",
+    "methods": "DELETE/GET/PUT",
+    "module": "webterminal",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/device",
+    "methods": "DELETE/POST/PUT",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/device/shutdown",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/device/wakeup",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/deviceorderadjustment",
+    "methods": "PUT",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/devices",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/devices_lite",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/lastlogs",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/logs",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/service/configure",
+    "methods": "GET/PUT",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/service/getipv4interface",
+    "methods": "GET",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/api/wol/webhooktest",
+    "methods": "POST",
+    "module": "wol",
+    "source": "lucky_wol-5frTMnyy.js",
+    "notes": ""
+  },
+  {
+    "path": "/frontendcontroll",
+    "methods": "GET",
+    "module": "base",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/officialwebsiteaddresslist",
+    "methods": "GET",
+    "module": "base",
+    "source": "lucky_index.js",
+    "notes": ""
+  },
+  {
+    "path": "/version",
+    "methods": "GET",
+    "module": "base",
+    "source": "lucky_index.js",
+    "notes": ""
+  }
+]
