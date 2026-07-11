@@ -2,7 +2,8 @@ import { Field, Root, Type } from 'protobufjs/light';
 import { ungzip } from 'pako';
 import { useEffect, useState } from 'react';
 
-import { luckySessionState } from '@/src/store/lucky-session';
+import { refreshLuckyToken } from '@/src/lib/lucky-fetch';
+import { endLuckySession, luckySessionState } from '@/src/store/lucky-session';
 import type { LuckyLiveStatus, LuckyRecord, LuckyStatusSample } from '@/src/types/lucky';
 
 const sampleType = new Type('SystemSample')
@@ -106,17 +107,32 @@ export function useLuckyStatus() {
 
     function connect() {
       if (disposed || !luckySessionState.baseUrl || !luckySessionState.token) return;
+      const socketToken = luckySessionState.token;
       socket = new WebSocket(statusSocketUrl());
       socket.binaryType = 'arraybuffer';
       socket.onopen = () => {
         reconnectDelay = 1000;
-        setConnected(true);
         setError('');
       };
       socket.onmessage = async (event) => {
         try {
-          if (typeof event.data === 'string') throw new Error(event.data || '状态服务返回了错误');
+          if (typeof event.data === 'string') {
+            if (/token|login|invalid/i.test(event.data)) {
+              try {
+                if (socketToken === luckySessionState.token) await refreshLuckyToken();
+                setError('');
+              } catch {
+                await endLuckySession();
+                throw new Error('登录已失效，请重新登录');
+              } finally {
+                socket?.close();
+              }
+              return;
+            }
+            throw new Error(event.data || '状态服务返回了错误');
+          }
           setData(decodeStatus(await messageBytes(event.data)));
+          setConnected(true);
         } catch (caught) {
           setError(caught instanceof Error ? caught.message : '状态数据解析失败');
         }

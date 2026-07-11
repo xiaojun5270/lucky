@@ -24,7 +24,6 @@
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.21",
     "expo": "^57.0.4",
-    "expo-blur": "~57.0.0",
     "expo-build-properties": "~57.0.3",
     "expo-constants": "~57.0.3",
     "expo-dev-client": "~57.0.5",

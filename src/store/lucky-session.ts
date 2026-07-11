@@ -70,6 +70,16 @@ export async function saveLuckySession(session: PersistedSession) {
   await writeSession(JSON.stringify(normalized));
 }
 
+export async function saveLuckyToken(token: string) {
+  luckySessionState.token = token;
+  await writeSession(JSON.stringify({
+    baseUrl: luckySessionState.baseUrl,
+    account: luckySessionState.account,
+    password: luckySessionState.password,
+    token,
+  } satisfies PersistedSession));
+}
+
 export async function endLuckySession() {
   luckySessionState.token = '';
   await writeSession(JSON.stringify({

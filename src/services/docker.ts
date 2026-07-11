@@ -58,7 +58,7 @@ export function callDockerApi(
 export async function listDockerContainers() {
   const raw = await callDockerApi("containers", "GET", undefined, {
     all: true,
-    includeStats: true,
+    includeStats: false,
     includeNetworkMode: true,
   });
   return { items: list(raw, ["containers", "list"]), raw };

@@ -6,9 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/src/lib/theme';
 
-export function Page({ title, subtitle, icon: Icon, children, refreshing, onRefresh }: { title: string; subtitle?: string; icon?: LucideIcon; children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
+export function Page({ title, subtitle, icon: Icon, children, refreshing, onRefresh, safeTop = true }: { title: string; subtitle?: string; icon?: LucideIcon; children: ReactNode; refreshing?: boolean; onRefresh?: () => void; safeTop?: boolean }) {
   const colors = useAppTheme();
-  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }} edges={['top']}>
+  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }} edges={safeTop ? ['top'] : []}>
     <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 110, gap: 16 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>{Icon ? <View style={{ width: 44, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft }}><Icon color={colors.primary} size={23} /></View> : null}<View style={{ flex: 1, gap: 3 }}><Text style={{ color: colors.text, fontSize: 26, fontWeight: '800' }}>{title}</Text>{subtitle ? <Text style={{ color: colors.subtext, fontSize: 13 }}>{subtitle}</Text> : null}</View></View>

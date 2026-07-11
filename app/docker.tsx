@@ -525,6 +525,7 @@ export default function DockerScreen() {
       title="Docker"
       subtitle="容器、镜像与 Compose 管理"
       icon={Container}
+      safeTop={false}
       refreshing={active.isFetching}
       onRefresh={() => active.refetch()}
     >

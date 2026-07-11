@@ -28,6 +28,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  ScrollView,
   Switch,
   Text,
   TextInput,
@@ -195,7 +196,7 @@ function IconButton({
   );
 }
 
-function JsonEditor({
+function WebServiceEditor({
   editor,
   busy,
   onClose,
@@ -207,18 +208,219 @@ function JsonEditor({
   onSave: (value: LuckyRecord) => void;
 }) {
   const colors = useAppTheme();
-  const [text, setText] = useState(JSON.stringify(editor.value, null, 2));
+  const [value, setValue] = useState(() => clone(editor.value));
+  const [advanced, setAdvanced] = useState(false);
+  const [text, setText] = useState(() => JSON.stringify(editor.value, null, 2));
   const [error, setError] = useState("");
-  function save() {
+
+  function update(key: string, next: unknown) {
+    setValue((current) => ({ ...current, [key]: next }));
+    setError("");
+  }
+
+  function parseJson() {
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("必须是 JSON 对象");
+    return parsed as LuckyRecord;
+  }
+
+  function showForm() {
     try {
-      const parsed = JSON.parse(text) as unknown;
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-        throw new Error("必须是 JSON 对象");
-      onSave(parsed as LuckyRecord);
+      setValue(parseJson());
+      setAdvanced(false);
+      setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "JSON 格式错误");
     }
   }
+
+  function save() {
+    try {
+      onSave(advanced ? parseJson() : value);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "JSON 格式错误");
+    }
+  }
+
+  function Field({
+    label,
+    field,
+    multiline = false,
+    numeric = false,
+    readOnly = false,
+    hint,
+  }: {
+    label: string;
+    field: string;
+    multiline?: boolean;
+    numeric?: boolean;
+    readOnly?: boolean;
+    hint?: string;
+  }) {
+    const current = Array.isArray(value[field])
+      ? (value[field] as unknown[]).join("\n")
+      : String(value[field] ?? "");
+    return (
+      <View style={{ gap: 6 }}>
+        <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>
+          {label}
+        </Text>
+        <TextInput
+          value={current}
+          editable={!readOnly}
+          multiline={multiline}
+          keyboardType={numeric ? "numeric" : "default"}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textAlignVertical={multiline ? "top" : "center"}
+          onChangeText={(next) => {
+            if (Array.isArray(value[field])) {
+              update(field, next.split(/\r?\n/).map((item) => item.trim()).filter(Boolean));
+            } else if (numeric) {
+              update(field, Number.parseInt(next, 10) || 0);
+            } else update(field, next);
+          }}
+          style={{
+            minHeight: multiline ? 92 : 44,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: readOnly ? colors.mutedCard : colors.card,
+            color: readOnly ? colors.subtext : colors.text,
+            paddingHorizontal: 12,
+            paddingVertical: multiline ? 10 : 8,
+          }}
+        />
+        {hint ? <Text style={{ color: colors.subtext, fontSize: 10 }}>{hint}</Text> : null}
+      </View>
+    );
+  }
+
+  function Toggle({ label, field }: { label: string; field: string }) {
+    return (
+      <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <Text style={{ flex: 1, color: colors.text, fontSize: 13, fontWeight: "600" }}>
+          {label}
+        </Text>
+        <Switch
+          value={Boolean(value[field])}
+          onValueChange={(next) => update(field, next)}
+          trackColor={{ false: colors.disabled, true: colors.primary }}
+        />
+      </View>
+    );
+  }
+
+  function Choices({
+    label,
+    field,
+    options,
+  }: {
+    label: string;
+    field: string;
+    options: string[];
+  }) {
+    return (
+      <View style={{ gap: 7 }}>
+        <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{label}</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+          {options.map((option) => {
+            const selected = String(value[field] ?? "") === option;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => update(field, option)}
+                style={{
+                  minWidth: 76,
+                  height: 38,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: selected ? colors.primary : colors.border,
+                  backgroundColor: selected ? colors.primarySoft : colors.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: selected ? colors.primary : colors.text, fontWeight: "700", fontSize: 12 }}>
+                  {option}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  function form() {
+    if (editor.type === "rule") return (
+      <>
+        <Field label="规则名称" field="RuleName" />
+        <Toggle label="启用规则" field="Enable" />
+        <Choices label="网络协议" field="Network" options={["tcp", "tcp4", "tcp6"]} />
+        <Field label="监听 IP" field="ListenIP" hint="留空表示监听所有地址" />
+        <Field label="监听端口" field="ListenPort" numeric />
+        <Choices label="编辑模式" field="DiaglogShowMode" options={["simple", "full"]} />
+        <Toggle label="自动配置防火墙" field="AutoOptionsFirewall" />
+        <Toggle label="启用 TLS" field="EnableTLS" />
+        {Boolean(value.EnableTLS) ? <>
+          <Field label="TLS 最低版本" field="TLSMinVersion" numeric />
+          <Toggle label="启用 HTTP/3" field="Http3" />
+        </> : null}
+        <Field label="最大请求头 (KB)" field="MaxHeaderKBytes" numeric />
+      </>
+    );
+    if (editor.type === "subrule") return (
+      <>
+        <Field label="备注" field="Remark" />
+        <Toggle label="启用子规则" field="Enable" />
+        <Field label="分组 Key" field="GroupKey" />
+        <Field label="服务类型" field="WebServiceType" hint="例如 reverseproxy、fileserver" />
+        <Field label="域名" field="Domains" multiline hint="每行填写一个域名" />
+        <Field label="目标地址或目录" field="Locations" multiline hint="每行填写一个地址" />
+        <Toggle label="启用访问日志" field="EnableAccessLog" />
+        <Toggle label="忽略上游 TLS 证书错误" field="LocationInsecureSkipVerify" />
+        <Toggle label="EasyLucky 模式" field="EasyLucky" />
+      </>
+    );
+    if (editor.type === "group") return (
+      <>
+        <Field label="分组名称" field="Name" />
+        {editor.key ? <Field label="分组 Key" field="Key" readOnly /> : null}
+      </>
+    );
+    if (editor.type === "cgi") return (
+      <>
+        <Field label="实例名称" field="Name" />
+        <Toggle label="启用 CGI" field="Enable" />
+        <Choices label="CGI 类型" field="CGIType" options={["php", "fastcgi"]} />
+        <Choices label="网络协议" field="Network" options={["tcp", "tcp4", "tcp6", "unix"]} />
+        <Field label="服务地址" field="Address" hint="例如 127.0.0.1:9000" />
+        <Field label="最大连接数" field="MaxConns" numeric />
+        <Field label="连接超时（秒）" field="ConnectTimeout" numeric />
+        <Field label="默认文档根目录" field="DefaultDocRoot" />
+        <Field label="默认首页" field="DefaultIndexNames" multiline hint="每行一个文件名" />
+        <Field label="文件扩展名" field="FileExtensions" />
+        <Field label="禁止访问路径" field="ForbiddenPaths" multiline />
+      </>
+    );
+    const primitiveFields = Object.keys(value).filter(
+      (key) => !["ret", "msg"].includes(key) && ["string", "number", "boolean"].includes(typeof value[key]),
+    );
+    return primitiveFields.length ? <>
+      {primitiveFields.map((field) => typeof value[field] === "boolean"
+        ? <Toggle key={field} label={field} field={field} />
+        : <Field key={field} label={field} field={field} numeric={typeof value[field] === "number"} />)}
+      <Text style={{ color: colors.subtext, fontSize: 11, lineHeight: 17 }}>
+        对象和列表配置可在高级 JSON 中编辑。
+      </Text>
+    </> : <Text style={{ color: colors.subtext, lineHeight: 20 }}>
+      此接口没有固定字段，请使用高级 JSON 填写请求参数。
+    </Text>;
+  }
+
   return (
     <Modal animationType="slide" transparent onRequestClose={onClose}>
       <SafeAreaView
@@ -231,7 +433,7 @@ function JsonEditor({
         <View
           style={{
             maxHeight: "88%",
-            minHeight: "62%",
+            minHeight: "56%",
             backgroundColor: colors.card,
             borderTopLeftRadius: 8,
             borderTopRightRadius: 8,
@@ -240,7 +442,7 @@ function JsonEditor({
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-            <Braces color={colors.primary} size={20} />
+            <FileCog color={colors.primary} size={20} />
             <Text
               style={{
                 flex: 1,
@@ -257,25 +459,57 @@ function JsonEditor({
               </Text>
             </Pressable>
           </View>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-            textAlignVertical="top"
-            style={{
-              flex: 1,
-              minHeight: 320,
-              borderRadius: 8,
-              backgroundColor: colors.mutedCard,
-              color: colors.text,
-              padding: 12,
-              fontFamily: "monospace",
-              fontSize: 11,
-              lineHeight: 17,
+          <Pressable
+            onPress={() => {
+              if (advanced) showForm();
+              else {
+                setText(JSON.stringify(value, null, 2));
+                setAdvanced(true);
+                setError("");
+              }
             }}
-          />
+            style={{
+              height: 40,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.border,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 7,
+            }}
+          >
+            <Braces color={colors.primary} size={16} />
+            <Text style={{ color: colors.primary, fontWeight: "700" }}>
+              {advanced ? "返回表单" : "高级 JSON"}
+            </Text>
+          </Pressable>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 13, paddingBottom: 4 }}
+            style={{ flexGrow: 0 }}
+          >
+            {advanced ? (
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                textAlignVertical="top"
+                style={{
+                  minHeight: 360,
+                  borderRadius: 8,
+                  backgroundColor: colors.mutedCard,
+                  color: colors.text,
+                  padding: 12,
+                  fontFamily: "monospace",
+                  fontSize: 11,
+                  lineHeight: 17,
+                }}
+              />
+            ) : form()}
+          </ScrollView>
           {error ? <ErrorState message={error} /> : null}
           <Pressable
             disabled={busy}
@@ -570,6 +804,7 @@ export default function WebServiceScreen() {
       title="Web 服务"
       subtitle="规则、分组、CGI 与运行设置"
       icon={Globe2}
+      safeTop={false}
       refreshing={activeQuery.isFetching}
       onRefresh={() => activeQuery.refetch()}
     >
@@ -1359,7 +1594,7 @@ export default function WebServiceScreen() {
       ) : null}
 
       {editor ? (
-        <JsonEditor
+        <WebServiceEditor
           key={`${editor.type}-${editor.key ?? "new"}`}
           editor={editor}
           busy={mutation.isPending}
