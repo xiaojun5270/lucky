@@ -9,7 +9,6 @@ export type LuckyLoginInput = {
   baseUrl: string;
   account: string;
   password: string;
-  twoFACode?: string;
 };
 
 export type LuckyListItem = LuckyRecord & {

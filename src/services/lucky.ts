@@ -1,4 +1,4 @@
-import { luckyFetch } from '@/src/lib/lucky-fetch';
+import { createLuckyRequestNonce, luckyFetch } from '@/src/lib/lucky-fetch';
 import type { LuckyDashboard, LuckyListItem, LuckyLoginInput, LuckyRecord, LuckyServiceKind } from '@/src/types/lucky';
 
 function body(value: LuckyRecord) {
@@ -17,10 +17,10 @@ export async function loginToLucky(input: LuckyLoginInput) {
   const timeout = setTimeout(() => controller.abort(), 12000);
   let response: Response;
   try {
-    response = await fetch(`${input.baseUrl.trim().replace(/\/$/, '')}/api/login`, {
+    response = await fetch(`${input.baseUrl.trim().replace(/\/$/, '')}/api/login?_=${createLuckyRequestNonce()}`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: body({ Account: input.account, Password: input.password, TwoFACode: input.twoFACode ?? '' }),
+      body: body({ Account: input.account.trim(), Password: input.password, TwoFA: '' }),
       signal: controller.signal,
     });
   } catch (error) {

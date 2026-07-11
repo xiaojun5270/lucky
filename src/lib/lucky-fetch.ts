@@ -18,6 +18,17 @@ function getUrl(baseUrl: string, path: string) {
   return `${baseUrl.trim().replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+export function createLuckyRequestNonce(now = Date.now()) {
+  const timestamp = String(now).slice(0, -1);
+  const checksum = [...timestamp].reduce((sum, digit) => sum + Number(digit), 0) % 8;
+  return `${timestamp}${checksum}`;
+}
+
+export function withLuckyRequestNonce(path: string, now = Date.now()) {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}_=${createLuckyRequestNonce(now)}`;
+}
+
 export async function luckyFetch<T extends LuckyRecord = LuckyRecord>(
   path: string,
   options: LuckyRequestOptions = {}
@@ -34,7 +45,7 @@ export async function luckyFetch<T extends LuckyRecord = LuckyRecord>(
   if (token) headers.set('Lucky-Admin-Token', token);
 
   try {
-    const response = await fetch(getUrl(baseUrl, path), { ...options, headers, signal: controller.signal });
+    const response = await fetch(getUrl(baseUrl, withLuckyRequestNonce(path)), { ...options, headers, signal: controller.signal });
     const raw = await response.text();
     let payload: LuckyResponse<T>;
     try {
