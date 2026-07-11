@@ -40,7 +40,8 @@ export async function luckyFetch<T extends LuckyRecord = LuckyRecord>(
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12000);
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
-  if (options.body) headers.set('Content-Type', 'application/json');
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (options.body && !isFormData) headers.set('Content-Type', 'application/json');
   const token = options.token ?? luckySessionState.token;
   if (token) headers.set('Lucky-Admin-Token', token);
 

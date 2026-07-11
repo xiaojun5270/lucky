@@ -1,10 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import { AlertTriangle, Play } from 'lucide-react-native';
+import { AlertTriangle, Braces, CheckCircle2, Route, Send, SlidersHorizontal } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
-import { EmptyState, ErrorState, Page, Panel } from '@/src/components/lucky-ui';
+import { EmptyState, ErrorState, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
 import { useAppTheme } from '@/src/lib/theme';
 import {
   callLuckyEndpoint,
@@ -55,7 +55,7 @@ export default function EndpointRunnerScreen() {
     },
   });
 
-  if (!endpoint) return <Page title="接口不存在"><EmptyState message="无法在接口清单中找到该端点" /></Page>;
+  if (!endpoint) return <Page title="接口不存在" icon={Braces}><EmptyState message="无法在接口清单中找到该端点" icon={Braces} /></Page>;
   const selectedEndpoint = endpoint;
   const dangerous = isDangerousLuckyRequest(selectedEndpoint, method);
   const inputStyle = { color: colors.text, backgroundColor: colors.mutedCard, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 11, fontFamily: 'monospace' as const, fontSize: 12 };
@@ -77,15 +77,16 @@ export default function EndpointRunnerScreen() {
     mutation.mutate();
   }
 
-  return <Page title="接口调试" subtitle={endpoint.module}>
-    <Panel><Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 13, lineHeight: 20 }}>{endpoint.path}</Text><Text style={{ color: colors.subtext, fontSize: 11 }}>来源：{endpoint.source || '开发文档'}</Text></Panel>
+  return <Page title="接口调试" subtitle={endpoint.module} icon={Braces}>
+    <Panel><View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9 }}><Route color={colors.primary} size={18} /><Text selectable style={{ flex: 1, color: colors.text, fontFamily: 'monospace', fontSize: 13, lineHeight: 20 }}>{endpoint.path}</Text></View><Text style={{ color: colors.subtext, fontSize: 11 }}>来源：{endpoint.source || '开发文档'}</Text></Panel>
+    <SectionHeader icon={SlidersHorizontal} title="请求配置" />
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{endpoint.methods.map((item) => <Pressable key={item} onPress={() => setMethod(item)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, backgroundColor: method === item ? colors.primary : colors.card, borderWidth: 1, borderColor: method === item ? colors.primary : colors.border }}><Text style={{ color: method === item ? '#fff' : colors.text, fontWeight: '800', fontSize: 12 }}>{item}</Text></Pressable>)}</View>
     {dangerous ? <View style={{ flexDirection: 'row', gap: 9, padding: 12, borderRadius: 8, backgroundColor: colors.dangerBg }}><AlertTriangle color={colors.danger} size={18} /><Text style={{ flex: 1, color: colors.danger, fontSize: 12, lineHeight: 18 }}>高风险请求，执行前会再次确认。</Text></View> : null}
     {endpoint.requiresSuffix ? <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{endpoint.pathVariables.length ? `路径参数 ${endpoint.pathVariables.join(', ')}` : '资源 Key / 路径后缀'}</Text><TextInput value={suffix} onChangeText={setSuffix} placeholder="输入 ID、Key 或资源名称" placeholderTextColor={colors.placeholder} autoCapitalize="none" style={inputStyle} /></View> : null}
     <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>查询参数 JSON</Text><TextInput value={queryText} onChangeText={setQueryText} multiline autoCapitalize="none" autoCorrect={false} style={[inputStyle, { minHeight: 82, textAlignVertical: 'top' }]} /></View>
     {method !== 'GET' ? <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>请求体 JSON</Text><TextInput value={bodyText} onChangeText={setBodyText} multiline autoCapitalize="none" autoCorrect={false} style={[inputStyle, { minHeight: 130, textAlignVertical: 'top' }]} /></View> : null}
     {inputError ? <ErrorState message={inputError} /> : null}{mutation.error ? <ErrorState message={mutation.error.message} /> : null}
-    <Pressable disabled={mutation.isPending} onPress={run} style={{ minHeight: 48, borderRadius: 8, backgroundColor: mutation.isPending ? colors.disabled : dangerous ? colors.danger : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Play color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{mutation.isPending ? '请求中…' : `执行 ${method}`}</Text></Pressable>
-    {mutation.data ? <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontWeight: '700' }}>响应</Text><Panel><Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>{formatResult(mutation.data)}</Text></Panel></View> : null}
+    <Pressable disabled={mutation.isPending} onPress={run} style={{ minHeight: 48, borderRadius: 8, backgroundColor: mutation.isPending ? colors.disabled : dangerous ? colors.danger : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Send color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{mutation.isPending ? '请求中…' : `执行 ${method}`}</Text></Pressable>
+    {mutation.data ? <View style={{ gap: 10 }}><SectionHeader icon={CheckCircle2} title="响应" /><Panel><Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>{formatResult(mutation.data)}</Text></Panel></View> : null}
   </Page>;
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import { ChevronDown, ChevronUp, FileText, List, Pause, Play, RefreshCw, RotateCw, Square } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Container, FileText, Globe2, List, Pause, Play, RefreshCw, RotateCw, ShieldCheck, Square } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, Switch, Text, View } from 'react-native';
 
@@ -11,10 +11,10 @@ import { getServiceDetail, getServiceItems, getServiceLogs, runServiceAction, se
 import type { LuckyListItem, LuckyRecord, LuckyServiceKind } from '@/src/types/lucky';
 
 const config = {
-  webservice: { title: '反向代理', subtitle: '域名、监听与后端规则' },
-  ddns: { title: '动态域名', subtitle: 'DDNS 任务状态与同步' },
-  docker: { title: 'Docker 容器', subtitle: '容器运行状态与控制' },
-  ssl: { title: 'SSL 证书', subtitle: '证书有效期与同步状态' },
+  webservice: { title: '反向代理', subtitle: '域名、监听与后端规则', icon: Globe2 },
+  ddns: { title: '动态域名', subtitle: 'DDNS 任务状态与同步', icon: RefreshCw },
+  docker: { title: 'Docker 容器', subtitle: '容器运行状态与控制', icon: Container },
+  ssl: { title: 'SSL 证书', subtitle: '证书有效期与同步状态', icon: ShieldCheck },
 } as const;
 
 function pick(item: LuckyRecord, keys: string[], fallback = '--') {
@@ -99,7 +99,7 @@ export default function ServiceDetailScreen() {
     setView('logs');
   }
 
-  return <Page title={meta.title} subtitle={meta.subtitle} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
+  return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
     <View style={{ flexDirection: 'row', gap: 8 }}>
       {([['list', '列表', List], ['logs', '日志', FileText]] as const).map(([value, label, Icon]) => <Pressable key={value} onPress={() => { setView(value); if (value === 'logs') setLogKey(undefined); }} style={{ flex: 1, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, backgroundColor: view === value ? colors.primary : colors.card, borderWidth: 1, borderColor: view === value ? colors.primary : colors.border }}><Icon color={view === value ? '#fff' : colors.text} size={16} /><Text style={{ color: view === value ? '#fff' : colors.text, fontWeight: '700' }}>{label}</Text></Pressable>)}
     </View>

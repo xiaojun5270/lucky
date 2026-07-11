@@ -36,6 +36,37 @@ export type LuckyDashboard = {
   modules: LuckyModule[];
 };
 
+export type LuckyStatusSample = {
+  time: number;
+  systemCpuPercent: number;
+  processCpuPercent: number;
+  totalMem: number;
+  usedMem: number;
+  netInTransfer: number;
+  netOutTransfer: number;
+  netInSpeed: number;
+  netOutSpeed: number;
+};
+
+export type LuckyLiveStatus = {
+  totalMem: number;
+  usedMem: number;
+  usedCpu: number;
+  currentProcessUsedCpu: number;
+  goroutine: number;
+  processUsedMem: number;
+  netIn: number;
+  netOut: number;
+  lastNetInSpeed: number;
+  lastNetOutSpeed: number;
+  handleCount: number;
+  numGc: number;
+  heapInuse: number;
+  runTime: string;
+  queryTime: string;
+  history: LuckyStatusSample[];
+};
+
 export type LuckyServiceKind = 'webservice' | 'ddns' | 'docker' | 'ssl';
 
 export type LuckyHttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';

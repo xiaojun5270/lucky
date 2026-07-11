@@ -24,9 +24,11 @@
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.21",
     "expo": "^57.0.4",
+    "expo-blur": "~57.0.0",
     "expo-build-properties": "~57.0.3",
     "expo-constants": "~57.0.3",
     "expo-dev-client": "~57.0.5",
+    "expo-document-picker": "~57.0.0",
     "expo-font": "~57.0.0",
     "expo-linking": "~57.0.2",
     "expo-router": "~57.0.4",
@@ -35,6 +37,8 @@
     "expo-status-bar": "~57.0.0",
     "expo-updates": "~57.0.6",
     "lucide-react-native": "^0.577.0",
+    "pako": "^3.0.1",
+    "protobufjs": "^8.7.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.2",
@@ -52,6 +56,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/pako": "^2.0.4",
     "@types/react": "~19.2.4",
     "typescript": "~6.0.3"
   },

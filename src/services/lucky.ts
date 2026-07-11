@@ -56,15 +56,21 @@ export async function loginToLucky(input: LuckyLoginInput) {
 }
 
 export async function getLuckyDashboard(): Promise<LuckyDashboard> {
-  const [status, info, modules] = await Promise.all([
+  const [status, info, modules, version] = await Promise.all([
     luckyFetch('/api/status'),
     luckyFetch('/api/info'),
     luckyFetch('/api/modules/list'),
+    luckyFetch('/version'),
   ]);
+  const standardModules = Array.isArray(modules.Modules) ? modules.Modules : [];
+  const extraModules = Array.isArray(modules.extraModules) ? modules.extraModules : [];
+  const moduleItems = [...standardModules, ...extraModules]
+    .filter((value): value is string => typeof value === 'string')
+    .map((name) => ({ Key: name, Name: name, Enable: true }));
   return {
     status,
-    info,
-    modules: firstArray(modules, ['list', 'modules', 'moduleList']),
+    info: { ...info, ...version },
+    modules: moduleItems.length ? moduleItems : firstArray(modules, ['list', 'modules', 'moduleList']),
   };
 }
 

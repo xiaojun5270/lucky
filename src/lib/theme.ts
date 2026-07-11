@@ -8,6 +8,7 @@ const lightTheme = {
   muted: '#edf3f7',
   surface: '#ffffff',
   primary: '#2563eb',
+  primarySoft: '#e9f1ff',
   primaryText: '#ffffff',
   text: '#111827',
   subtext: '#64748b',
@@ -18,6 +19,10 @@ const lightTheme = {
   errorText: '#e11d48',
   successBg: '#ecfdf5',
   success: '#047857',
+  warningBg: '#fff7e6',
+  warning: '#b45309',
+  cyanBg: '#e8f8fb',
+  cyan: '#0e7490',
   accentBg: '#fff7ed',
   accentText: '#c2410c',
   dark: '#111827',
@@ -31,6 +36,7 @@ const lightTheme = {
   iconSoftBg: '#eaf1ff',
   rowBorder: '#e2e8f0',
   placeholder: '#94a3b8',
+  shadow: '#0f172a',
 };
 
 const darkTheme: typeof lightTheme = {
@@ -41,6 +47,7 @@ const darkTheme: typeof lightTheme = {
   muted: '#172033',
   surface: '#0f172a',
   primary: '#3b82f6',
+  primarySoft: '#172b52',
   primaryText: '#ffffff',
   text: '#e5e7eb',
   subtext: '#9aa8ba',
@@ -51,6 +58,10 @@ const darkTheme: typeof lightTheme = {
   errorText: '#fb7185',
   successBg: '#063a32',
   success: '#34d399',
+  warningBg: '#3a2a0c',
+  warning: '#fbbf24',
+  cyanBg: '#10323a',
+  cyan: '#67e8f9',
   accentBg: '#3b2a0d',
   accentText: '#fbbf24',
   dark: '#2563eb',
@@ -64,6 +75,7 @@ const darkTheme: typeof lightTheme = {
   iconSoftBg: '#172b52',
   rowBorder: '#223044',
   placeholder: '#64748b',
+  shadow: '#000000',
 };
 
 export type AppTheme = typeof lightTheme;
