@@ -1,0 +1,67 @@
+import { luckyFetch } from "@/src/lib/lucky-fetch";
+import type { LuckyListItem, LuckyRecord } from "@/src/types/lucky";
+
+function isRecord(value: unknown): value is LuckyRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function query(params: LuckyRecord) {
+  const value = Object.entries(params)
+    .filter(([, item]) => item !== undefined && item !== null && item !== "")
+    .map(([key, item]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(item))}`)
+    .join("&");
+  return value ? `?${value}` : "";
+}
+
+function certificateScore(item: LuckyRecord) {
+  return ["Key", "key", "Remark", "remark", "AddFrom", "CertsInfo", "ExtParams", "SyncInfo"]
+    .reduce((score, key) => score + (item[key] !== undefined ? 1 : 0), 0);
+}
+
+function extractCertificates(payload: LuckyRecord): LuckyListItem[] {
+  const queue: unknown[] = [payload];
+  const visited = new Set<object>();
+  let best: LuckyRecord[] = [];
+  let bestScore = 0;
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+    if (Array.isArray(current)) {
+      const records = current.filter(isRecord);
+      const score = records.reduce((total, item) => total + certificateScore(item), 0);
+      if (records.length && score > bestScore) {
+        best = records;
+        bestScore = score;
+      }
+      queue.push(...current);
+      continue;
+    }
+    queue.push(...Object.values(current as LuckyRecord));
+  }
+  return bestScore > 0 ? best as LuckyListItem[] : [];
+}
+
+export async function getSslCertificates() {
+  const raw = await luckyFetch("/api/ssl");
+  return { items: extractCertificates(raw), raw };
+}
+
+export const getSslCertificate = (key: string) => luckyFetch(`/api/ssl/${encodeURIComponent(key)}`);
+export const createSslCertificate = (value: LuckyRecord) => luckyFetch("/api/ssl", { method: "POST", body: JSON.stringify(value) });
+export const updateSslCertificate = (value: LuckyRecord) => luckyFetch("/api/ssl", { method: "PUT", body: JSON.stringify(value) });
+export const deleteSslCertificate = (key: string) => luckyFetch(`/api/ssl${query({ key })}`, { method: "DELETE" });
+export const setSslCertificateEnabled = (key: string, enable: boolean) =>
+  luckyFetch(`/api/ssl/${encodeURIComponent(key)}${query({ enable })}`, { method: "PUT" });
+export const flushSslCertificate = (key: string) => luckyFetch(`/api/ssl/flush${query({ key })}`, { method: "PUT" });
+export const syncSslCertificate = (key: string) => luckyFetch(`/api/ssl/manualsync/${encodeURIComponent(key)}`);
+export const reorderSslCertificates = (keys: unknown) =>
+  luckyFetch("/api/ssl/sslorderadjustment", { method: "PUT", body: JSON.stringify(keys) });
+export const getSslSyncClients = () => luckyFetch("/api/ssl/syncclients");
+export const getSslSetting = () => luckyFetch("/api/ssl/setting");
+export const updateSslSetting = (value: LuckyRecord) =>
+  luckyFetch("/api/ssl/setting", { method: "PUT", body: JSON.stringify(value) });
+export const cancelSslAcme = (key: string) => luckyFetch(`/api/ssl/${encodeURIComponent(key)}/acmecancel`, { method: "DELETE" });
+export const getSslLogs = (key = "", pageSize = 100, page = 1) =>
+  luckyFetch(`/api/ssl/logs${query({ key, pageSize, page })}`);
+export const getSslLastLogs = (key = "") => luckyFetch(`/api/ssl/lastlogs${query({ key })}`);

@@ -1,4 +1,6 @@
 import { createLuckyRequestNonce, luckyFetch } from '@/src/lib/lucky-fetch';
+import { getDdnsTask, getDdnsTasks, setDdnsTaskEnabled, syncDdnsTask } from '@/src/services/ddns';
+import { getSslCertificate, getSslCertificates, setSslCertificateEnabled, syncSslCertificate } from '@/src/services/ssl';
 import type { LuckyDashboard, LuckyListItem, LuckyLoginInput, LuckyRecord, LuckyServiceKind } from '@/src/types/lucky';
 
 function body(value: LuckyRecord) {
@@ -82,6 +84,8 @@ const serviceEndpoints: Record<LuckyServiceKind, { path: string; keys: string[] 
 };
 
 export async function getServiceItems(kind: LuckyServiceKind) {
+  if (kind === 'ddns') return getDdnsTasks();
+  if (kind === 'ssl') return getSslCertificates();
   const endpoint = serviceEndpoints[kind];
   const payload = await luckyFetch(endpoint.path);
   return { items: firstArray(payload, endpoint.keys), raw: payload };
@@ -102,6 +106,8 @@ const detailPaths: Record<LuckyServiceKind, (key: string) => string> = {
 };
 
 export async function getServiceDetail(kind: LuckyServiceKind, key: string) {
+  if (kind === 'ddns') return getDdnsTask(key);
+  if (kind === 'ssl') return getSslCertificate(key);
   return luckyFetch(detailPaths[kind](encodeURIComponent(key)));
 }
 
@@ -141,8 +147,8 @@ export async function getServiceLogs(kind: LuckyServiceKind, key?: string) {
 
 export async function setServiceEnabled(kind: LuckyServiceKind, key: string, enabled: boolean) {
   const safeKey = encodeURIComponent(key);
-  if (kind === 'ddns') return luckyFetch(`/api/ddns/enable${query({ enable: enabled, key })}`);
-  if (kind === 'ssl') return luckyFetch(`/api/ssl/${safeKey}${query({ enable: enabled })}`, { method: 'PUT' });
+  if (kind === 'ddns') return setDdnsTaskEnabled(key, enabled);
+  if (kind === 'ssl') return setSslCertificateEnabled(key, enabled);
   throw new Error('该模块不支持直接启停');
 }
 
@@ -153,10 +159,10 @@ export async function runServiceAction(kind: LuckyServiceKind, key: string, acti
     return luckyFetch(`/api/docker/containers/${safeKey}/${action}`, { method: 'POST', body: body(actionBody) });
   }
   if (kind === 'ddns' && action === 'sync') {
-    return luckyFetch(`/api/ddns/manualSync/${safeKey}`);
+    return syncDdnsTask(key);
   }
   if (kind === 'ssl' && action === 'sync') {
-    return luckyFetch(`/api/ssl/manualsync/${safeKey}`);
+    return syncSslCertificate(key);
   }
   throw new Error('不支持的操作');
 }

@@ -7,6 +7,7 @@ import {
   CircleStop,
   Container,
   Database,
+  Ellipsis,
   FileText,
   Folder,
   Gauge,
@@ -28,7 +29,7 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Image as NativeImage, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -42,6 +43,8 @@ import {
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
 import { useAppTheme } from "@/src/lib/theme";
+import { getIconLibraryIcons } from "@/src/services/iconlib";
+import { luckySessionState } from "@/src/store/lucky-session";
 import type { LuckyRecord } from "@/src/types/lucky";
 import {
   addDockerRegistryMirror,
@@ -50,6 +53,8 @@ import {
   backupDockerVolume,
   buildDockerImage,
   clearDockerTasks,
+  clearDockerImageUpgradeStatus,
+  createDockerContainerGroup,
   createDockerContainer,
   createDockerNetwork,
   createDockerVolume,
@@ -60,14 +65,12 @@ import {
   getDockerContainer,
   getDockerContainerLogs,
   getDockerContainerProcesses,
-  getDockerDiskUsage,
   getDockerImage,
-  getDockerInfo,
   getDockerLogs,
-  getDockerMonitorStatus,
+  getDockerMaintenanceStatus,
+  getDockerOverview,
   getDockerRegistryMirrors,
   getDockerTask,
-  getDockerVersion,
   listDockerComposeProjects,
   listDockerContainers,
   listDockerImages,
@@ -79,6 +82,7 @@ import {
   pruneDocker,
   readDockerComposeConfig,
   removeDockerContainer,
+  removeDockerContainerGroup,
   removeDockerImage,
   removeDockerNetwork,
   removeDockerRegistryMirror,
@@ -186,6 +190,65 @@ function composePayload(item: LuckyRecord) {
   };
 }
 
+function containerIcon(item: LuckyRecord, icons: LuckyRecord[]) {
+  const labels = item.Labels && typeof item.Labels === "object" && !Array.isArray(item.Labels)
+    ? item.Labels as LuckyRecord
+    : {};
+  const direct = [
+    item.Icon,
+    item.icon,
+    item.Logo,
+    item.logo,
+    item.ImageIcon,
+    labels["net.unraid.docker.icon"],
+    labels["org.opencontainers.image.icon"],
+    labels["com.docker.desktop.extension.icon"],
+    labels.icon,
+  ].find((value) => typeof value === "string" && value.trim());
+  if (typeof direct === "string") return direct.trim();
+
+  const terms = [pick(item, ["Names", "Name", "name"]), pick(item, ["Image", "ImageName"])]
+    .flatMap((value) => value.toLowerCase().split(/[\/:@._-]+/))
+    .filter((value) => value.length >= 3 && !["latest", "docker", "library", "ghcr", "com"].includes(value));
+  let best = "";
+  let bestScore = 0;
+  for (const icon of icons) {
+    const path = pick(icon, ["RelativePath", "Path", "path"]);
+    const name = pick(icon, ["Name", "FileName", "name"], path).toLowerCase();
+    const score = terms.reduce((total, term) => total + (name === term ? 10 : name.includes(term) ? term.length : 0), 0);
+    if (score > bestScore) {
+      best = path;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 3 ? best : "";
+}
+
+function ContainerArtwork({ item, icons, running }: { item: LuckyRecord; icons: LuckyRecord[]; running: boolean }) {
+  const colors = useAppTheme();
+  const [failed, setFailed] = useState(false);
+  const icon = containerIcon(item, icons);
+  const external = /^(https?:|data:|file:)/i.test(icon);
+  const uri = !icon ? "" : external
+    ? icon
+    : `${luckySessionState.baseUrl.replace(/\/$/, "")}/api/iconlib/icon?path=${encodeURIComponent(icon)}`;
+  if (!uri || failed) return (
+    <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: running ? colors.successBg : colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+      <Container color={running ? colors.success : colors.disabled} size={20} />
+    </View>
+  );
+  return (
+    <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      <NativeImage
+        source={{ uri, headers: external || !luckySessionState.token ? undefined : { "Lucky-Admin-Token": luckySessionState.token } }}
+        onError={() => setFailed(true)}
+        resizeMode="contain"
+        style={{ width: 38, height: 38 }}
+      />
+    </View>
+  );
+}
+
 function IconButton({
   icon: Icon,
   label,
@@ -212,6 +275,40 @@ function IconButton({
       }}
     >
       <Icon color={color} size={16} />
+    </Pressable>
+  );
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  color,
+  onPress,
+}: {
+  icon: typeof Pencil;
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  const colors = useAppTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        minWidth: 0,
+        height: 42,
+        borderRadius: 8,
+        backgroundColor: colors.mutedCard,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        opacity: pressed ? 0.55 : 1,
+      })}
+    >
+      <Icon color={color} size={15} />
+      <Text numberOfLines={1} style={{ color, fontSize: 11, fontWeight: "700" }}>{label}</Text>
     </Pressable>
   );
 }
@@ -304,12 +401,19 @@ export default function DockerScreen() {
   const [view, setView] = useState<DockerView>("containers");
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<Editor>();
+  const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
   const containers = useQuery({
     queryKey: ["docker", "containers"],
     queryFn: listDockerContainers,
     enabled: view === "containers",
+  });
+  const iconLibrary = useQuery({
+    queryKey: ["iconlib", "icons"],
+    queryFn: getIconLibraryIcons,
+    enabled: view === "containers",
+    staleTime: 30 * 60 * 1000,
   });
   const images = useQuery({
     queryKey: ["docker", "images"],
@@ -338,15 +442,7 @@ export default function DockerScreen() {
   });
   const overview = useQuery({
     queryKey: ["docker", "overview"],
-    queryFn: async () => {
-      const [info, version, disk, monitor] = await Promise.all([
-        getDockerInfo(),
-        getDockerVersion(),
-        getDockerDiskUsage(),
-        getDockerMonitorStatus(),
-      ]);
-      return { info, version, disk, monitor };
-    },
+    queryFn: getDockerOverview,
     enabled: view === "overview",
   });
   const config = useQuery({
@@ -357,6 +453,11 @@ export default function DockerScreen() {
   const mirrors = useQuery({
     queryKey: ["docker", "mirrors"],
     queryFn: getDockerRegistryMirrors,
+    enabled: view === "settings",
+  });
+  const maintenance = useQuery({
+    queryKey: ["docker", "maintenance"],
+    queryFn: getDockerMaintenanceStatus,
     enabled: view === "settings",
   });
   const logs = useQuery({
@@ -415,6 +516,9 @@ export default function DockerScreen() {
         );
       if (type === "task-remove") return removeDockerTask(key ?? "");
       if (type === "tasks-clear") return clearDockerTasks();
+      if (type === "group-create") return createDockerContainerGroup(value ?? {});
+      if (type === "group-remove") return removeDockerContainerGroup(String(value?.key ?? key ?? ""));
+      if (type === "upgrade-status-clear") return clearDockerImageUpgradeStatus();
       if (type === "config-save") return updateDockerConfig(value ?? {});
       if (type === "prune") return pruneDocker(value ?? {});
       if (type === "mirror-add")
@@ -495,6 +599,19 @@ export default function DockerScreen() {
       setLocalError(error instanceof Error ? error.message : "读取日志失败");
     }
   }
+  async function editContainer(key: string) {
+    try {
+      const result = await getDockerContainer(key);
+      setEditor({
+        type: "container-edit",
+        title: "编辑容器",
+        key,
+        value: nested(result, ["container", "data"]),
+      });
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "读取容器配置失败");
+    }
+  }
 
   return (
     <Page
@@ -502,8 +619,14 @@ export default function DockerScreen() {
       subtitle="容器、镜像与 Compose 管理"
       icon={Container}
       safeTop={false}
-      refreshing={active.isFetching}
-      onRefresh={() => active.refetch()}
+      refreshing={active.isFetching || (view === "settings" && maintenance.isFetching)}
+      onRefresh={() => {
+        active.refetch();
+        if (view === "settings") {
+          mirrors.refetch();
+          maintenance.refetch();
+        }
+      }}
     >
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {tabs.map(([key, label, Icon]) => (
@@ -612,23 +735,7 @@ export default function DockerScreen() {
                       gap: 10,
                     }}
                   >
-                    <View
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 8,
-                        backgroundColor: running
-                          ? colors.successBg
-                          : colors.mutedCard,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Container
-                        color={running ? colors.success : colors.disabled}
-                        size={19}
-                      />
-                    </View>
+                    <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontWeight: "800" }}>
                         {name}
@@ -655,11 +762,9 @@ export default function DockerScreen() {
                       }}
                     />
                   </View>
-                  <View
-                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
-                  >
+                  <View style={{ flexDirection: "row", gap: 7 }}>
                     {paused ? (
-                      <IconButton
+                      <ActionButton
                         icon={Play}
                         label="恢复"
                         color={colors.success}
@@ -668,7 +773,7 @@ export default function DockerScreen() {
                         }
                       />
                     ) : !running ? (
-                      <IconButton
+                      <ActionButton
                         icon={Play}
                         label="启动"
                         color={colors.success}
@@ -677,28 +782,18 @@ export default function DockerScreen() {
                         }
                       />
                     ) : (
-                      <>
-                        <IconButton
-                          icon={CircleStop}
-                          label="停止"
-                          color={colors.danger}
-                          onPress={() =>
-                            danger("确认停止", `停止容器 ${name}？`, () =>
-                              mutation.mutate({ type: "container-stop", key }),
-                            )
-                          }
-                        />
-                        <IconButton
-                          icon={Pause}
-                          label="暂停"
-                          color={colors.warning}
-                          onPress={() =>
-                            mutation.mutate({ type: "container-pause", key })
-                          }
-                        />
-                      </>
+                      <ActionButton
+                        icon={CircleStop}
+                        label="停止"
+                        color={colors.danger}
+                        onPress={() =>
+                          danger("确认停止", `停止容器 ${name}？`, () =>
+                            mutation.mutate({ type: "container-stop", key }),
+                          )
+                        }
+                      />
                     )}
-                    <IconButton
+                    <ActionButton
                       icon={RotateCw}
                       label="重启"
                       color={colors.primary}
@@ -708,75 +803,17 @@ export default function DockerScreen() {
                         )
                       }
                     />
-                    <IconButton
-                      icon={FileText}
-                      label="日志"
-                      color={colors.cyan}
-                      onPress={() => containerLogs(key)}
-                    />
-                    <IconButton
-                      icon={Folder}
-                      label="文件"
-                      color={colors.warning}
-                      onPress={() =>
-                        setEditor({
-                          type: "container-files",
-                          title: "容器文件操作",
-                          key,
-                          value: { operation: "list", path: "/" },
-                        })
-                      }
-                    />
-                    <IconButton
-                      icon={Activity}
-                      label="进程"
-                      color={colors.cyan}
-                      onPress={async () =>
-                        setOutput(await getDockerContainerProcesses(key))
-                      }
-                    />
-                    <IconButton
+                    <ActionButton
                       icon={Search}
                       label="详情"
                       color={colors.text}
                       onPress={() => inspect("container", key)}
                     />
-                    <IconButton
-                      icon={Pencil}
-                      label="编辑"
+                    <ActionButton
+                      icon={Ellipsis}
+                      label="更多"
                       color={colors.primary}
-                      onPress={async () => {
-                        const result = await getDockerContainer(key);
-                        setEditor({
-                          type: "container-edit",
-                          title: "编辑容器",
-                          key,
-                          value: nested(result, ["container", "data"]),
-                        });
-                      }}
-                    />
-                    <IconButton
-                      icon={Box}
-                      label="重命名"
-                      color={colors.primary}
-                      onPress={() =>
-                        setEditor({
-                          type: "container-rename",
-                          title: "重命名容器",
-                          key,
-                          value: { name },
-                        })
-                      }
-                    />
-                    <IconButton
-                      icon={Trash2}
-                      label="删除"
-                      color={colors.danger}
-                      onPress={() =>
-                        danger("确认删除", `强制删除容器 ${name}？`, () =>
-                          mutation.mutate({ type: "container-remove", key }),
-                        )
-                      }
+                      onPress={() => setContainerMenu({ key, name, running, paused })}
                     />
                   </View>
                 </Panel>
@@ -1282,18 +1319,18 @@ export default function DockerScreen() {
           <SectionHeader icon={Gauge} title="Docker 总览" />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             {[
-              ["运行状态", pick(overview.data.monitor, ["Status", "status", "State", "state"], "正常"), Activity],
+              ["运行状态", typeof overview.data.monitor === "boolean" ? (overview.data.monitor ? "正常" : "已停用") : String(overview.data.monitor ?? "正常"), Activity],
               [
                 "版本",
-                pick(overview.data.version, ["Version", "version"]),
+                String(overview.data.version ?? "--"),
                 Box,
               ],
               [
                 "容器",
-                pick(overview.data.info, ["Containers", "containers"]),
+                String(overview.data.containerCount),
                 Container,
               ],
-              ["镜像", pick(overview.data.info, ["Images", "images"]), Image],
+              ["镜像", String(overview.data.imageCount), Image],
             ].map(([label, value, Icon]) => (
               <Panel key={String(label)}>
                 <View style={{ width: 130, minHeight: 64 }}>
@@ -1351,6 +1388,40 @@ export default function DockerScreen() {
               <Text style={{ color: "#fff", fontWeight: "800" }}>编辑设置</Text>
             </Pressable>
           ) : null}
+          {maintenance.error ? <ErrorState message={maintenance.error.message} retry={() => maintenance.refetch()} /> : null}
+          <SectionHeader icon={Activity} title="运行与维护" meta={maintenance.isFetching ? "正在刷新" : "10 个接口"} />
+          {maintenance.data ? <>
+            <Panel>
+              <SectionHeader icon={Container} title="运行环境" />
+              <StructuredDataView value={{ selfContainer: maintenance.data.selfContainer, cachedStats: maintenance.data.cachedStats, cronContainers: maintenance.data.cronContainers }} />
+            </Panel>
+            <Panel>
+              <SectionHeader icon={Box} title="分组与标签" />
+              <StructuredDataView value={{ labels: maintenance.data.labels, containerGroups: maintenance.data.containerGroups, collapsedStates: maintenance.data.collapsedStates, orderMapping: maintenance.data.orderMapping }} />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Pressable
+                  onPress={() => setEditor({ type: "group-create", title: "添加容器分组", value: { Name: "", Key: "" } })}
+                  style={{ flex: 1, height: 40, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                ><Plus color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: "700" }}>添加分组</Text></Pressable>
+                <Pressable
+                  onPress={() => setEditor({ type: "group-remove", title: "删除容器分组", value: { key: "" } })}
+                  style={{ flex: 1, height: 40, borderRadius: 8, borderWidth: 1, borderColor: colors.danger, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                ><Trash2 color={colors.danger} size={15} /><Text style={{ color: colors.danger, fontWeight: "700" }}>删除分组</Text></Pressable>
+              </View>
+            </Panel>
+            <Panel>
+              <SectionHeader icon={Database} title="备份任务" />
+              <StructuredDataView value={{ composeBackup: maintenance.data.composeBackup, volumeBackup: maintenance.data.volumeBackup }} />
+            </Panel>
+            <Panel>
+              <SectionHeader icon={Image} title="镜像升级" />
+              <StructuredDataView value={maintenance.data.imageUpgrades} />
+              <Pressable
+                onPress={() => danger("清除升级状态", "确定清除全部镜像升级检查记录吗？", () => mutation.mutate({ type: "upgrade-status-clear" }))}
+                style={{ height: 40, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center" }}
+              ><Text style={{ color: colors.danger, fontWeight: "700" }}>清除升级状态</Text></Pressable>
+            </Panel>
+          </> : null}
           <Panel>
             <Text style={{ color: colors.text, fontWeight: "800" }}>
               Registry Mirrors
@@ -1536,6 +1607,40 @@ export default function DockerScreen() {
             mutation.mutate({ type: editor.type, key: editor.key, value });
           }}
         />
+      ) : null}
+      {containerMenu ? (
+        <Modal transparent animationType="slide" onRequestClose={() => setContainerMenu(undefined)}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
+            <Pressable style={{ flex: 1 }} onPress={() => setContainerMenu(undefined)} />
+            <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: 18, gap: 6 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>更多操作</Text>
+                  <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 12, marginTop: 3 }}>{containerMenu.name}</Text>
+                </View>
+                <Pressable onPress={() => setContainerMenu(undefined)}><Text style={{ color: colors.primary, fontWeight: "700" }}>完成</Text></Pressable>
+              </View>
+              {[
+                ...(containerMenu.running && !containerMenu.paused ? [{ icon: Pause, label: "暂停容器", color: colors.warning, action: () => mutation.mutate({ type: "container-pause", key: containerMenu.key }) }] : []),
+                { icon: FileText, label: "查看日志", color: colors.cyan, action: () => containerLogs(containerMenu.key) },
+                { icon: Folder, label: "管理文件", color: colors.warning, action: () => setEditor({ type: "container-files", title: "容器文件操作", key: containerMenu.key, value: { operation: "list", path: "/" } }) },
+                { icon: Activity, label: "查看进程", color: colors.cyan, action: async () => setOutput(await getDockerContainerProcesses(containerMenu.key)) },
+                { icon: Pencil, label: "编辑配置", color: colors.primary, action: () => editContainer(containerMenu.key) },
+                { icon: Box, label: "重命名", color: colors.primary, action: () => setEditor({ type: "container-rename", title: "重命名容器", key: containerMenu.key, value: { name: containerMenu.name } }) },
+                { icon: Trash2, label: "删除容器", color: colors.danger, action: () => danger("确认删除", `强制删除容器 ${containerMenu.name}？`, () => mutation.mutate({ type: "container-remove", key: containerMenu.key })) },
+              ].map(({ icon: Icon, label, color, action }, index) => (
+                <Pressable
+                  key={label}
+                  onPress={() => { setContainerMenu(undefined); action(); }}
+                  style={({ pressed }) => ({ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, opacity: pressed ? 0.5 : 1 })}
+                >
+                  <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}><Icon color={color} size={17} /></View>
+                  <Text style={{ flex: 1, color, fontSize: 15, fontWeight: "600" }}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </SafeAreaView>
+        </Modal>
       ) : null}
     </Page>
   );
