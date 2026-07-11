@@ -1,0 +1,31 @@
+{
+  "extends": "expo/tsconfig.base",
+  "include": [
+    "app/**/*.tsx",
+    "src/components/lucky-ui.tsx",
+    "src/lib/lucky-fetch.ts",
+    "src/lib/query-client.ts",
+    "src/lib/theme.ts",
+    "src/services/lucky.ts",
+    "src/store/lucky-session.ts",
+    "src/types/lucky.ts",
+    "src/*.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    ".agents",
+    "skills"
+  ],
+  "compilerOptions": {
+    "strict": true,
+    "types": [
+      "uniwind/types"
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  }
+}
