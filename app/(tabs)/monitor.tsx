@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Boxes, CheckCircle2, Cpu, Download, Gauge, HardDrive, Network, Server, Upload } from 'lucide-react-native';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import Svg, { Line, Polyline } from 'react-native-svg';
 
 import { EmptyState, ErrorState, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
@@ -74,7 +74,7 @@ export default function DashboardScreen() {
   return <Page title="总览" subtitle="Lucky 服务运行状态" icon={Gauge} refreshing={query.isFetching} onRefresh={() => query.refetch()}>
     {query.error ? <ErrorState message={query.error.message} retry={() => query.refetch()} /> : null}
     {live.error && !live.data ? <ErrorState message={live.error} /> : null}
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{metrics.map(({ label, value, icon: Icon, color, background }) => <View key={label} style={{ width: '48%', minHeight: 112, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 14, justifyContent: 'space-between', shadowColor: colors.shadow, shadowOpacity: 0.035, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: background }}><Icon color={color} size={17} /></View><Text style={{ flex: 1, color: colors.subtext, fontSize: 12 }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{value}</Text></View>)}</View>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{metrics.map(({ label, value, icon: Icon, color, background }) => <View key={label} style={{ width: '48%', minHeight: 112, borderRadius: 8, backgroundColor: colors.card, borderWidth: Platform.OS === 'ios' ? 0 : 1, borderColor: colors.border, padding: 14, justifyContent: 'space-between' }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: background }}><Icon color={color} size={17} strokeWidth={2.2} /></View><Text style={{ flex: 1, color: colors.subtext, fontSize: 12 }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{value}</Text></View>)}</View>
 
     {live.data ? <>
       <Panel><SectionHeader icon={Cpu} title="系统资源" meta={`内存 ${memoryPercent.toFixed(1)}%`} /><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}><Legend color={colors.primary} label="系统 CPU" /><Legend color={colors.danger} label="进程 CPU" /><Legend color={colors.success} label="系统内存" /></View><TrendChart samples={history} maxValue={100} series={[

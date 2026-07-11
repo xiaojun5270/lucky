@@ -17,16 +17,16 @@ export default function ServicesScreen() {
   }, [search]);
   const go = (kind: string) => router.push((kind === 'webservice' ? '/webservice' : kind === 'docker' ? '/docker' : `/services/${kind}`) as never);
 
-  const moduleIcon = (key: string): LucideIcon => {
-    if (/docker/i.test(key)) return Container;
-    if (/ssl|auth|coraza/i.test(key)) return ShieldCheck;
-    if (/ddns|cloudflared|frp|wol/i.test(key)) return RadioTower;
-    if (/webservice|webdav|ftp|dlna/i.test(key)) return Globe2;
-    if (/cron|task/i.test(key)) return Clock3;
-    if (/terminal/i.test(key)) return Terminal;
-    if (/storage|rclone|backup|ipdb/i.test(key)) return Database;
-    if (/network|port/i.test(key)) return Network;
-    return Puzzle;
+  const moduleVisual = (key: string): { icon: LucideIcon; color: string; background: string } => {
+    if (/docker/i.test(key)) return { icon: Container, color: colors.warning, background: colors.warningBg };
+    if (/ssl|auth|coraza/i.test(key)) return { icon: ShieldCheck, color: colors.success, background: colors.successBg };
+    if (/ddns|cloudflared|frp|wol/i.test(key)) return { icon: RadioTower, color: colors.cyan, background: colors.cyanBg };
+    if (/webservice|webdav|ftp|dlna/i.test(key)) return { icon: Globe2, color: colors.primary, background: colors.primarySoft };
+    if (/cron|task/i.test(key)) return { icon: Clock3, color: colors.warning, background: colors.warningBg };
+    if (/terminal/i.test(key)) return { icon: Terminal, color: colors.success, background: colors.successBg };
+    if (/storage|rclone|backup|ipdb/i.test(key)) return { icon: Database, color: colors.cyan, background: colors.cyanBg };
+    if (/network|port/i.test(key)) return { icon: Network, color: colors.primary, background: colors.primarySoft };
+    return { icon: Puzzle, color: colors.subtext, background: colors.mutedCard };
   };
 
   return <Page title="服务" subtitle="45 个模块 · 328 条端点 · 448 个方法" icon={Layers3}>
@@ -39,8 +39,8 @@ export default function ServicesScreen() {
     </View>
     <SectionHeader icon={Boxes} title="全部模块" meta={`${modules.length} 项`} />
     <SearchField value={search} onChangeText={setSearch} placeholder="搜索模块" />
-    <View style={{ gap: 9 }}>{modules.map((module) => <Pressable key={module.key} onPress={() => router.push(`/modules/${module.key}` as never)} style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      {(() => { const Icon = moduleIcon(module.key); return <View style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mutedCard }}><Icon color={colors.subtext} size={18} /></View>; })()}
+    <View style={{ backgroundColor: colors.card, borderRadius: 8, overflow: 'hidden', paddingHorizontal: 14 }}>{modules.map((module, index) => <Pressable key={module.key} onPress={() => router.push(`/modules/${module.key}` as never)} style={({ pressed }) => ({ minHeight: 62, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, opacity: pressed ? 0.55 : 1 })}>
+      {(() => { const visual = moduleVisual(module.key); const Icon = visual.icon; return <View style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: visual.background }}><Icon color={visual.color} size={18} strokeWidth={2.2} /></View>; })()}
       <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontWeight: '700' }}>{module.label}</Text><Text style={{ color: colors.subtext, fontSize: 11, marginTop: 4 }}>{module.endpointCount} 个端点 · {module.methodCount} 个方法</Text></View>
       <ChevronRight color={colors.disabled} size={18} />
     </Pressable>)}</View>

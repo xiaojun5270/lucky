@@ -23,7 +23,7 @@ export default function RootLayout() {
     <StatusBar style={colors.mode === 'dark' ? 'light' : 'dark'} />
     <QueryClientProvider client={queryClient}>
       {!session.hydrated ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.page }}><ActivityIndicator color={colors.primary} /></View> :
-        <Stack screenOptions={{ headerStyle: { backgroundColor: colors.page }, headerTintColor: colors.text, headerShadowVisible: false }}>
+        <Stack screenOptions={{ headerStyle: { backgroundColor: colors.page }, headerTintColor: colors.primary, headerShadowVisible: false, headerTitleStyle: { color: colors.text, fontWeight: '600' } }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="services/[kind]" options={{ title: '服务详情', headerBackTitle: '返回' }} />
