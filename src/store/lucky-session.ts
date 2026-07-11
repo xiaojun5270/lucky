@@ -8,12 +8,14 @@ const SESSION_KEY = 'lucky_app_session';
 type PersistedSession = {
   baseUrl: string;
   account: string;
+  password: string;
   token: string;
 };
 
 export const luckySessionState = proxy({
   baseUrl: '',
   account: '',
+  password: '',
   token: '',
   hydrated: false,
 });
@@ -52,6 +54,7 @@ export async function hydrateLuckySession() {
       const saved = JSON.parse(raw) as Partial<PersistedSession>;
       luckySessionState.baseUrl = saved.baseUrl?.trim().replace(/\/$/, '') ?? '';
       luckySessionState.account = saved.account ?? '';
+      luckySessionState.password = saved.password ?? '';
       luckySessionState.token = saved.token ?? '';
     }
   } catch {
@@ -67,11 +70,14 @@ export async function saveLuckySession(session: PersistedSession) {
   await writeSession(JSON.stringify(normalized));
 }
 
-export async function clearLuckySession() {
-  luckySessionState.baseUrl = '';
-  luckySessionState.account = '';
+export async function endLuckySession() {
   luckySessionState.token = '';
-  await writeSession(null);
+  await writeSession(JSON.stringify({
+    baseUrl: luckySessionState.baseUrl,
+    account: luckySessionState.account,
+    password: luckySessionState.password,
+    token: '',
+  } satisfies PersistedSession));
 }
 
 export function isLuckyAuthenticated() {

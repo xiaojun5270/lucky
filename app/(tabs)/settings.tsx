@@ -7,12 +7,12 @@ import { Page, Panel } from '@/src/components/lucky-ui';
 import { queryClient } from '@/src/lib/query-client';
 import { useAppTheme } from '@/src/lib/theme';
 import { logoutLucky } from '@/src/services/lucky';
-import { clearLuckySession, luckySessionState } from '@/src/store/lucky-session';
+import { endLuckySession, luckySessionState } from '@/src/store/lucky-session';
 
 export default function SettingsScreen() {
   const colors = useAppTheme();
   const [busy, setBusy] = useState(false);
-  const leave = async () => { setBusy(true); try { await logoutLucky(); } catch {} finally { await clearLuckySession(); queryClient.clear(); router.replace('/login'); setBusy(false); } };
+  const leave = async () => { setBusy(true); try { await logoutLucky(); } catch {} finally { await endLuckySession(); queryClient.clear(); router.replace('/login'); setBusy(false); } };
   return <Page title="设置" subtitle="当前 Lucky 连接"><Panel>
     <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={{ width: 42, height: 42, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.iconSoftBg }}><Server color={colors.primary} size={21} /></View><View style={{ flex: 1 }}><Text style={{ color: colors.text, fontWeight: '700' }}>{luckySessionState.account || '管理员'}</Text><Text selectable numberOfLines={2} style={{ color: colors.subtext, marginTop: 3, fontSize: 12 }}>{luckySessionState.baseUrl}</Text></View></View>
   </Panel><Panel><Text style={{ color: colors.text, fontWeight: '700' }}>安全说明</Text><Text style={{ color: colors.subtext, lineHeight: 20, fontSize: 13 }}>公网访问时应在 Lucky 前配置 HTTPS 与访问控制。管理 Token 不会写入 Web 的持久存储。</Text></Panel>

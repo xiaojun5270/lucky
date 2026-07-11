@@ -23,14 +23,14 @@ export default function LoginScreen() {
   const colors = useAppTheme();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { baseUrl: luckySessionState.baseUrl || 'http://', account: luckySessionState.account, password: '' } });
+  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { baseUrl: luckySessionState.baseUrl || 'http://', account: luckySessionState.account, password: luckySessionState.password } });
   const fieldStyle = { backgroundColor: colors.mutedCard, borderRadius: 8, paddingHorizontal: 13, paddingVertical: 13, color: colors.text, fontSize: 15 } as const;
 
   const submit = handleSubmit(async (values) => {
     setError('');
     try {
       const token = await loginToLucky(values);
-      await saveLuckySession({ baseUrl: values.baseUrl, account: values.account, token });
+      await saveLuckySession({ baseUrl: values.baseUrl, account: values.account, password: values.password, token });
       queryClient.clear();
       router.replace('/monitor');
     } catch (caught) { setError(caught instanceof Error ? caught.message : '登录失败'); }
