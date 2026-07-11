@@ -18,7 +18,7 @@ export default function ModuleEndpointsScreen() {
     return getLuckyEndpoints(moduleKey).filter((endpoint) => !keyword || `${endpoint.path} ${endpoint.methods.join(' ')}`.toLowerCase().includes(keyword));
   }, [moduleKey, search]);
 
-  return <Page title={module?.label ?? moduleKey} subtitle={`${module?.endpointCount ?? 0} 条端点 · ${module?.methodCount ?? 0} 个方法`} icon={Route}>
+  return <Page title={module?.label ?? moduleKey} subtitle={`${module?.endpointCount ?? 0} 条端点 · ${module?.methodCount ?? 0} 个方法`} icon={Route} safeTop={false}>
     <SearchField value={search} onChangeText={setSearch} placeholder="搜索路径或方法" />
     {endpoints.length ? endpoints.map((endpoint) => <Pressable key={endpoint.id} onPress={() => router.push(`/endpoints/${endpoint.id}` as never)} style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 8, padding: 14, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9 }}><Braces color={colors.subtext} size={17} /><Text selectable style={{ flex: 1, color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 }}>{endpoint.path}</Text><ArrowUpRight color={colors.disabled} size={17} /></View>

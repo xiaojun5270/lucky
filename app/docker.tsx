@@ -28,7 +28,7 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -39,6 +39,7 @@ import {
   SearchField,
   SectionHeader,
 } from "@/src/components/lucky-ui";
+import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
 import { useAppTheme } from "@/src/lib/theme";
 import type { LuckyRecord } from "@/src/types/lucky";
@@ -215,7 +216,7 @@ function IconButton({
   );
 }
 
-function JsonEditor({
+function DockerFormEditor({
   editor,
   busy,
   close,
@@ -227,8 +228,7 @@ function JsonEditor({
   save: (value: LuckyRecord) => void;
 }) {
   const colors = useAppTheme();
-  const [text, setText] = useState(JSON.stringify(editor.value, null, 2));
-  const [error, setError] = useState("");
+  const [value, setValue] = useState(() => clone(editor.value));
   return (
     <Modal transparent animationType="slide" onRequestClose={close}>
       <SafeAreaView
@@ -268,40 +268,16 @@ function JsonEditor({
               </Text>
             </Pressable>
           </View>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            multiline
-            autoCorrect={false}
-            autoCapitalize="none"
-            textAlignVertical="top"
-            style={{
-              flex: 1,
-              minHeight: 300,
-              borderRadius: 8,
-              backgroundColor: colors.mutedCard,
-              color: colors.text,
-              padding: 12,
-              fontFamily: "monospace",
-              fontSize: 11,
-              lineHeight: 17,
-            }}
-          />
-          {error ? <ErrorState message={error} /> : null}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 12, paddingBottom: 4 }}
+            style={{ flex: 1 }}
+          >
+            <StructuredForm value={value} onChange={setValue} />
+          </ScrollView>
           <Pressable
             disabled={busy}
-            onPress={() => {
-              try {
-                const value = JSON.parse(text) as unknown;
-                if (!value || typeof value !== "object" || Array.isArray(value))
-                  throw new Error("必须是 JSON 对象");
-                save(value as LuckyRecord);
-              } catch (caught) {
-                setError(
-                  caught instanceof Error ? caught.message : "JSON 格式错误",
-                );
-              }
-            }}
+            onPress={() => save(value)}
             style={{
               height: 48,
               borderRadius: 8,
@@ -328,7 +304,7 @@ export default function DockerScreen() {
   const [view, setView] = useState<DockerView>("containers");
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<Editor>();
-  const [output, setOutput] = useState("");
+  const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
   const containers = useQuery({
     queryKey: ["docker", "containers"],
@@ -506,14 +482,14 @@ export default function DockerScreen() {
           : kind === "image"
             ? await getDockerImage(key)
             : await getDockerTask(key);
-      setOutput(JSON.stringify(result, null, 2));
+      setOutput(result);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "读取失败");
     }
   }
   async function containerLogs(key: string) {
     try {
-      setOutput(JSON.stringify(await getDockerContainerLogs(key), null, 2));
+      setOutput(await getDockerContainerLogs(key));
       setView("logs");
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "读取日志失败");
@@ -756,13 +732,7 @@ export default function DockerScreen() {
                       label="进程"
                       color={colors.cyan}
                       onPress={async () =>
-                        setOutput(
-                          JSON.stringify(
-                            await getDockerContainerProcesses(key),
-                            null,
-                            2,
-                          ),
-                        )
+                        setOutput(await getDockerContainerProcesses(key))
                       }
                     />
                     <IconButton
@@ -815,21 +785,7 @@ export default function DockerScreen() {
           ) : !containers.isLoading ? (
             <EmptyState message="暂无容器" icon={Container} />
           ) : null}
-          {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  lineHeight: 16,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
-          ) : null}
+          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1047,13 +1003,7 @@ export default function DockerScreen() {
                       label="日志"
                       color={colors.cyan}
                       onPress={async () => {
-                        setOutput(
-                          JSON.stringify(
-                            await getDockerComposeLogs(name, { tail: 200 }),
-                            null,
-                            2,
-                          ),
-                        );
+                        setOutput(await getDockerComposeLogs(name, { tail: 200 }));
                         setView("logs");
                       }}
                     />
@@ -1229,13 +1179,7 @@ export default function DockerScreen() {
                     label="备份列表"
                     color={colors.text}
                     onPress={async () =>
-                      setOutput(
-                        JSON.stringify(
-                          await listDockerVolumeBackups(name),
-                          null,
-                          2,
-                        ),
-                      )
+                      setOutput(await listDockerVolumeBackups(name))
                     }
                   />
                   <IconButton
@@ -1265,20 +1209,7 @@ export default function DockerScreen() {
               </Panel>
             );
           })}
-          {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
-          ) : null}
+          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1342,20 +1273,7 @@ export default function DockerScreen() {
               </Panel>
             );
           })}
-          {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
-          ) : null}
+          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1364,7 +1282,7 @@ export default function DockerScreen() {
           <SectionHeader icon={Gauge} title="Docker 总览" />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             {[
-              ["运行状态", JSON.stringify(overview.data.monitor), Activity],
+              ["运行状态", pick(overview.data.monitor, ["Status", "status", "State", "state"], "正常"), Activity],
               [
                 "版本",
                 pick(overview.data.version, ["Version", "version"]),
@@ -1405,17 +1323,7 @@ export default function DockerScreen() {
           </View>
           <Panel>
             <SectionHeader icon={HardDrive} title="磁盘占用" />
-            <Text
-              selectable
-              style={{
-                color: colors.text,
-                fontFamily: "monospace",
-                fontSize: 10,
-                lineHeight: 16,
-              }}
-            >
-              {JSON.stringify(overview.data.disk, null, 2)}
-            </Text>
+            <StructuredDataView value={overview.data.disk} />
           </Panel>
         </>
       ) : null}
@@ -1447,13 +1355,7 @@ export default function DockerScreen() {
             <Text style={{ color: colors.text, fontWeight: "800" }}>
               Registry Mirrors
             </Text>
-            <Text selectable style={{ color: colors.subtext, fontSize: 11 }}>
-              {JSON.stringify(
-                mirrors.data?.mirrors ?? mirrors.data?.list ?? [],
-                null,
-                2,
-              )}
-            </Text>
+            <StructuredDataView value={mirrors.data?.mirrors ?? mirrors.data?.list ?? []} />
             <View style={{ flexDirection: "row", gap: 8 }}>
               <Pressable
                 onPress={() =>
@@ -1555,19 +1457,7 @@ export default function DockerScreen() {
         <>
           <SectionHeader icon={FileText} title="Docker 日志" />
           {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  lineHeight: 16,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
+            <Panel><StructuredDataView value={output} /></Panel>
           ) : lines(logs.data).length ? (
             <Panel>
               {lines(logs.data).map((line, index) => (
@@ -1595,7 +1485,7 @@ export default function DockerScreen() {
       ) : null}
 
       {editor ? (
-        <JsonEditor
+        <DockerFormEditor
           key={`${editor.type}-${editor.key ?? "new"}`}
           editor={editor}
           busy={mutation.isPending}
@@ -1618,18 +1508,12 @@ export default function DockerScreen() {
                 readOperations.includes(operation) ? request : undefined,
                 operation.includes("async") ? 600000 : undefined,
               );
-              setOutput(JSON.stringify(result, null, 2));
+              setOutput(result);
               setEditor(undefined);
               return;
             }
             if (editor.type === "compose-discover") {
-              setOutput(
-                JSON.stringify(
-                  await discoverDockerCompose(String(value.scan_path ?? "")),
-                  null,
-                  2,
-                ),
-              );
+              setOutput(await discoverDockerCompose(String(value.scan_path ?? "")));
               setEditor(undefined);
               return;
             }

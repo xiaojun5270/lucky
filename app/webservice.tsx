@@ -3,7 +3,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
-  Braces,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -43,6 +42,7 @@ import {
   Panel,
   SectionHeader,
 } from "@/src/components/lucky-ui";
+import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
 import { useAppTheme } from "@/src/lib/theme";
 import type { LuckyRecord } from "@/src/types/lucky";
@@ -209,38 +209,13 @@ function WebServiceEditor({
 }) {
   const colors = useAppTheme();
   const [value, setValue] = useState(() => clone(editor.value));
-  const [advanced, setAdvanced] = useState(false);
-  const [text, setText] = useState(() => JSON.stringify(editor.value, null, 2));
-  const [error, setError] = useState("");
 
   function update(key: string, next: unknown) {
     setValue((current) => ({ ...current, [key]: next }));
-    setError("");
-  }
-
-  function parseJson() {
-    const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error("必须是 JSON 对象");
-    return parsed as LuckyRecord;
-  }
-
-  function showForm() {
-    try {
-      setValue(parseJson());
-      setAdvanced(false);
-      setError("");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "JSON 格式错误");
-    }
   }
 
   function save() {
-    try {
-      onSave(advanced ? parseJson() : value);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "JSON 格式错误");
-    }
+    onSave(value);
   }
 
   function Field({
@@ -406,19 +381,7 @@ function WebServiceEditor({
         <Field label="禁止访问路径" field="ForbiddenPaths" multiline />
       </>
     );
-    const primitiveFields = Object.keys(value).filter(
-      (key) => !["ret", "msg"].includes(key) && ["string", "number", "boolean"].includes(typeof value[key]),
-    );
-    return primitiveFields.length ? <>
-      {primitiveFields.map((field) => typeof value[field] === "boolean"
-        ? <Toggle key={field} label={field} field={field} />
-        : <Field key={field} label={field} field={field} numeric={typeof value[field] === "number"} />)}
-      <Text style={{ color: colors.subtext, fontSize: 11, lineHeight: 17 }}>
-        对象和列表配置可在高级 JSON 中编辑。
-      </Text>
-    </> : <Text style={{ color: colors.subtext, lineHeight: 20 }}>
-      此接口没有固定字段，请使用高级 JSON 填写请求参数。
-    </Text>;
+    return <StructuredForm value={value} onChange={setValue} />;
   }
 
   return (
@@ -459,58 +422,13 @@ function WebServiceEditor({
               </Text>
             </Pressable>
           </View>
-          <Pressable
-            onPress={() => {
-              if (advanced) showForm();
-              else {
-                setText(JSON.stringify(value, null, 2));
-                setAdvanced(true);
-                setError("");
-              }
-            }}
-            style={{
-              height: 40,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: colors.border,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-            }}
-          >
-            <Braces color={colors.primary} size={16} />
-            <Text style={{ color: colors.primary, fontWeight: "700" }}>
-              {advanced ? "返回表单" : "高级 JSON"}
-            </Text>
-          </Pressable>
           <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ gap: 13, paddingBottom: 4 }}
-            style={{ flexGrow: 0 }}
+            style={{ flex: 1 }}
           >
-            {advanced ? (
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                textAlignVertical="top"
-                style={{
-                  minHeight: 360,
-                  borderRadius: 8,
-                  backgroundColor: colors.mutedCard,
-                  color: colors.text,
-                  padding: 12,
-                  fontFamily: "monospace",
-                  fontSize: 11,
-                  lineHeight: 17,
-                }}
-              />
-            ) : form()}
+            {form()}
           </ScrollView>
-          {error ? <ErrorState message={error} /> : null}
           <Pressable
             disabled={busy}
             onPress={save}
@@ -540,7 +458,7 @@ export default function WebServiceScreen() {
   const [view, setView] = useState<ViewKey>("rules");
   const [expanded, setExpanded] = useState("");
   const [editor, setEditor] = useState<EditorState>();
-  const [output, setOutput] = useState("");
+  const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
   const [folderTarget, setFolderTarget] = useState<{ parentKey: string; subKey: string }>();
   const [mountIndex, setMountIndex] = useState("0");
@@ -612,7 +530,7 @@ export default function WebServiceScreen() {
             : createWebServiceCgi(value);
         if (source.type === "settings") return updateWebServiceSettings(value);
         const result = await getLightPanelConfigTemplate(value);
-        setOutput(JSON.stringify(result, null, 2));
+        setOutput(result);
         return result;
       }
       if (action.type === "delete-rule")
@@ -729,7 +647,7 @@ export default function WebServiceScreen() {
   async function showSubRuleLogs(parentKey: string, key: string) {
     try {
       const value = await getWebServiceRuleLastLogs(parentKey, key);
-      setOutput(JSON.stringify(value, null, 2));
+      setOutput(value);
       setView("logs");
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "读取日志失败");
@@ -752,7 +670,7 @@ export default function WebServiceScreen() {
         Math.max(0, Number.parseInt(mountIndex, 10) || 0),
         { uri: asset.uri, name: asset.name, type: asset.mimeType ?? undefined },
       );
-      setOutput(JSON.stringify(result, null, 2));
+      setOutput(result);
       const nested = result.data && typeof result.data === "object" ? (result.data as LuckyRecord) : {};
       const tempId = String(result.tempId ?? nested.tempId ?? "");
       if (!tempId) {
@@ -1424,21 +1342,7 @@ export default function WebServiceScreen() {
       {view === "logs" ? (
         <>
           <SectionHeader icon={ScrollText} title="Web 服务日志" />
-          {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  lineHeight: 16,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
-          ) : null}
+          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
           {logLines(logs.data).length ? (
             <Panel>
               {logLines(logs.data).map((line, index) => (
@@ -1477,7 +1381,7 @@ export default function WebServiceScreen() {
                 onPress={async () => {
                   try {
                     const result = await getWebServiceRules(true);
-                    setOutput(JSON.stringify(result.raw, null, 2));
+                    setOutput(result.raw);
                   } catch (error) {
                     setLocalError(
                       error instanceof Error ? error.message : "请求失败",
@@ -1506,7 +1410,7 @@ export default function WebServiceScreen() {
               </Pressable>
               <Pressable
                 onPress={() =>
-                  setOutput(JSON.stringify(tips.data ?? {}, null, 2))
+                  setOutput(tips.data ?? {})
                 }
                 style={{
                   flex: 1,
@@ -1575,21 +1479,7 @@ export default function WebServiceScreen() {
               </Text>
             </Pressable>
           </Panel>
-          {output ? (
-            <Panel>
-              <Text
-                selectable
-                style={{
-                  color: colors.text,
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  lineHeight: 16,
-                }}
-              >
-                {output}
-              </Text>
-            </Panel>
-          ) : null}
+          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 

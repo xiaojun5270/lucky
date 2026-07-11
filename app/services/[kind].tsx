@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Pressable, Switch, Text, View } from 'react-native';
 
 import { EmptyState, ErrorState, Page, Panel } from '@/src/components/lucky-ui';
+import { StructuredDataView } from '@/src/components/structured-form';
 import { queryClient } from '@/src/lib/query-client';
 import { useAppTheme } from '@/src/lib/theme';
 import { getServiceDetail, getServiceItems, getServiceLogs, runServiceAction, setServiceEnabled } from '@/src/services/lucky';
@@ -35,18 +36,11 @@ function isEnabled(item: LuckyListItem) {
   return value !== false && value !== 0 && value !== 'false';
 }
 
-function detailRows(payload?: LuckyRecord) {
-  if (!payload) return [];
+function detailValue(payload?: LuckyRecord) {
+  if (!payload) return {};
   const nested = [payload.data, payload.rule, payload.task, payload.container, payload.ssl]
     .find((value) => value && typeof value === 'object' && !Array.isArray(value));
-  const source = (nested ?? payload) as LuckyRecord;
-  return Object.entries(source)
-    .filter(([key]) => !['ret', 'msg'].includes(key))
-    .slice(0, 18)
-    .map(([key, value]) => {
-      const text = typeof value === 'string' ? value : JSON.stringify(value);
-      return [key, text.length > 240 ? `${text.slice(0, 240)}...` : text] as const;
-    });
+  return (nested ?? payload) as LuckyRecord;
 }
 
 export default function ServiceDetailScreen() {
@@ -99,7 +93,7 @@ export default function ServiceDetailScreen() {
     setView('logs');
   }
 
-  return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
+  return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} safeTop={false} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
     <View style={{ flexDirection: 'row', gap: 8 }}>
       {([['list', '列表', List], ['logs', '日志', FileText]] as const).map(([value, label, Icon]) => <Pressable key={value} onPress={() => { setView(value); if (value === 'logs') setLogKey(undefined); }} style={{ flex: 1, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, backgroundColor: view === value ? colors.primary : colors.card, borderWidth: 1, borderColor: view === value ? colors.primary : colors.border }}><Icon color={view === value ? '#fff' : colors.text} size={16} /><Text style={{ color: view === value ? '#fff' : colors.text, fontWeight: '700' }}>{label}</Text></Pressable>)}
     </View>
@@ -130,7 +124,7 @@ export default function ServiceDetailScreen() {
           {kind === 'docker' || kind === 'ssl' ? <Pressable onPress={() => showLogs(key)} style={{ height: 38, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}><FileText color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>查看日志</Text></Pressable> : null}
           {expanded ? <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, gap: 8 }}>
             {detailQuery.error ? <ErrorState message={detailQuery.error.message} retry={() => detailQuery.refetch()} /> : null}
-            {detailRows(detailQuery.data).map(([label, value]) => <View key={label} style={{ flexDirection: 'row', gap: 10 }}><Text style={{ width: 100, color: colors.subtext, fontSize: 11 }}>{label}</Text><Text selectable style={{ flex: 1, color: colors.text, fontSize: 11, lineHeight: 17 }}>{value}</Text></View>)}
+            {detailQuery.data ? <StructuredDataView value={detailValue(detailQuery.data)} /> : null}
           </View> : null}
         </Panel>;
       }) : !query.isLoading && !query.error ? <EmptyState message="接口未返回列表数据" /> : null}
