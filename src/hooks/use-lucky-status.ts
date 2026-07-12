@@ -1,10 +1,14 @@
+import { useFocusEffect } from 'expo-router';
 import { Field, Root, Type } from 'protobufjs/light';
 import { ungzip } from 'pako';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { refreshLuckyToken } from '@/src/lib/lucky-fetch';
 import { endLuckySession, luckySessionState } from '@/src/store/lucky-session';
 import type { LuckyLiveStatus, LuckyRecord, LuckyStatusSample } from '@/src/types/lucky';
+
+const STATUS_UPDATE_INTERVAL = 1000;
+const STATUS_HISTORY_LIMIT = 90;
 
 const sampleType = new Type('SystemSample')
   .add(new Field('time', 1, 'int64'))
@@ -58,8 +62,7 @@ function sample(value: LuckyRecord): LuckyStatusSample {
 }
 
 function decodeStatus(bytes: Uint8Array): LuckyLiveStatus {
-  const decoded = statusType.decode(ungzip(bytes));
-  const value = statusType.toObject(decoded, { defaults: true, longs: Number }) as LuckyRecord;
+  const value = statusType.decode(ungzip(bytes)) as unknown as LuckyRecord;
   if (value.ok === false) throw new Error(typeof value.error === 'string' ? value.error : '状态连接无效');
   return {
     totalMem: number(value.totalMem),
@@ -77,7 +80,9 @@ function decodeStatus(bytes: Uint8Array): LuckyLiveStatus {
     heapInuse: number(value.heapInuse),
     runTime: typeof value.runTime === 'string' ? value.runTime : '',
     queryTime: typeof value.queryTime === 'string' ? value.queryTime : '',
-    history: Array.isArray(value.history) ? value.history.map((item) => sample(item as LuckyRecord)) : [],
+    history: Array.isArray(value.history)
+      ? value.history.slice(-STATUS_HISTORY_LIMIT).map((item) => sample(item as LuckyRecord))
+      : [],
   };
 }
 
@@ -99,11 +104,44 @@ export function useLuckyStatus() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let disposed = false;
     let socket: WebSocket | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let statusTimer: ReturnType<typeof setTimeout> | undefined;
     let reconnectDelay = 1000;
+    let lastStatusUpdate = 0;
+    let pendingStatus: unknown;
+    let decoding = false;
+
+    async function flushStatus() {
+      if (disposed || decoding || pendingStatus === undefined) return;
+      const wait = STATUS_UPDATE_INTERVAL - (Date.now() - lastStatusUpdate);
+      if (wait > 0) {
+        if (!statusTimer) statusTimer = setTimeout(() => {
+          statusTimer = undefined;
+          void flushStatus();
+        }, wait);
+        return;
+      }
+      const message = pendingStatus;
+      pendingStatus = undefined;
+      decoding = true;
+      try {
+        const next = decodeStatus(await messageBytes(message));
+        if (!disposed) {
+          lastStatusUpdate = Date.now();
+          setData(next);
+          setConnected(true);
+          setError('');
+        }
+      } catch (caught) {
+        if (!disposed) setError(caught instanceof Error ? caught.message : '状态数据解析失败');
+      } finally {
+        decoding = false;
+        if (pendingStatus !== undefined) void flushStatus();
+      }
+    }
 
     function connect() {
       if (disposed || !luckySessionState.baseUrl || !luckySessionState.token) return;
@@ -131,8 +169,8 @@ export function useLuckyStatus() {
             }
             throw new Error(event.data || '状态服务返回了错误');
           }
-          setData(decodeStatus(await messageBytes(event.data)));
-          setConnected(true);
+          pendingStatus = event.data;
+          void flushStatus();
         } catch (caught) {
           setError(caught instanceof Error ? caught.message : '状态数据解析失败');
         }
@@ -151,9 +189,10 @@ export function useLuckyStatus() {
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (statusTimer) clearTimeout(statusTimer);
       socket?.close();
     };
-  }, []);
+  }, []));
 
   return { data, connected, error };
 }

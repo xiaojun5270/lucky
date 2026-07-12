@@ -54,7 +54,15 @@ export const deleteSslCertificate = (key: string) => luckyFetch(`/api/ssl${query
 export const setSslCertificateEnabled = (key: string, enable: boolean) =>
   luckyFetch(`/api/ssl/${encodeURIComponent(key)}${query({ enable })}`, { method: "PUT" });
 export const flushSslCertificate = (key: string) => luckyFetch(`/api/ssl/flush${query({ key })}`, { method: "PUT" });
-export const syncSslCertificate = (key: string) => luckyFetch(`/api/ssl/manualsync/${encodeURIComponent(key)}`);
+export async function syncSslCertificate(key: string) {
+  try {
+    return await luckyFetch(`/api/ssl/manualsync/${encodeURIComponent(key)}`);
+  } catch (error) {
+    if (error instanceof Error && /PermissionDeniedCannotUseSyncFunction/i.test(error.message))
+      throw new Error("当前账号没有证书分发同步权限");
+    throw error;
+  }
+}
 export const reorderSslCertificates = (keys: unknown) =>
   luckyFetch("/api/ssl/sslorderadjustment", { method: "PUT", body: JSON.stringify(keys) });
 export const getSslSyncClients = () => luckyFetch("/api/ssl/syncclients");

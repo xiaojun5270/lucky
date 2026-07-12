@@ -378,16 +378,13 @@ export async function getDockerOverview() {
 
 export async function getDockerMaintenanceStatus() {
   const requests = {
-    selfContainer: getDockerSelfContainerInfo(),
     labels: getDockerLabels(),
     containerGroups: getDockerContainerGroups(),
     collapsedStates: getDockerContainerGroupCollapsedStates(),
     orderMapping: getDockerContainerOrderMapping(),
-    cachedStats: getAllDockerContainerStats(),
     imageUpgrades: getDockerImageUpgradeStatus(),
     composeBackup: getDockerComposeBackupStatus(),
     volumeBackup: getDockerVolumeBackupStatus(),
-    cronContainers: getDockerComposeContainersForCron(),
   };
   const entries = Object.entries(requests);
   const results = await Promise.allSettled(entries.map(([, request]) => request));
@@ -403,8 +400,47 @@ export const updateDockerConfig = (data: LuckyRecord) =>
   callDockerApi("config", "POST", data);
 export const getDockerLogs = (pageSize = 200, page = 1) =>
   callDockerApi("logs", "GET", undefined, { pageSize, page });
-export const pruneDocker = (data: LuckyRecord) =>
-  callDockerApi("prune", "POST", data);
+async function pruneUnusedDockerImages() {
+  const { items } = await listDockerImages();
+  const removed: string[] = [];
+  const skipped: string[] = [];
+  for (let index = 0; index < items.length; index += 6) {
+    const batch = items.slice(index, index + 6);
+    const results = await Promise.all(batch.map(async (image) => {
+      const id = [image.Id, image.ID, image.id].find((value) => typeof value === "string") as string | undefined;
+      if (!id) return { id: "未知镜像", removed: false };
+      try {
+        const usage = await getDockerImageContainers(id);
+        const containers = list(usage, ["containers", "list"]);
+        if (containers.length) return { id, removed: false };
+        await removeDockerImage(id, true);
+        return { id, removed: true };
+      } catch {
+        return { id, removed: false };
+      }
+    }));
+    for (const result of results) (result.removed ? removed : skipped).push(result.id);
+  }
+  return { removed, skipped, removedCount: removed.length };
+}
+
+export async function pruneDocker(data: LuckyRecord) {
+  try {
+    return await callDockerApi("prune", "POST", data);
+  } catch (error) {
+    if (!(error instanceof Error) || !/invalid filter\s+['\"]?dangling/i.test(error.message) || data.images !== true)
+      throw error;
+
+    const remaining: LuckyRecord = { ...data, images: false };
+    const hasOtherCleanup = ["containers", "networks", "volumes", "build_cache"]
+      .some((key) => remaining[key] === true);
+    const system = hasOtherCleanup
+      ? await callDockerApi("prune", "POST", remaining)
+      : {};
+    const images = await pruneUnusedDockerImages();
+    return { ret: 0, msg: "已使用兼容模式清理未使用镜像", system, images };
+  }
+}
 export const getDockerRegistryMirrors = () => callDockerApi("registry/mirrors");
 export const addDockerRegistryMirror = (mirror: string) =>
   callDockerApi("registry/mirrors", "POST", { mirror });

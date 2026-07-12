@@ -1,6 +1,6 @@
 import { createLuckyRequestNonce, luckyFetch } from '@/src/lib/lucky-fetch';
 import { getDdnsTask, getDdnsTasks, setDdnsTaskEnabled, syncDdnsTask } from '@/src/services/ddns';
-import { getSslCertificate, getSslCertificates, setSslCertificateEnabled, syncSslCertificate } from '@/src/services/ssl';
+import { flushSslCertificate, getSslCertificate, getSslCertificates, setSslCertificateEnabled, syncSslCertificate } from '@/src/services/ssl';
 import type { LuckyDashboard, LuckyListItem, LuckyLoginInput, LuckyRecord, LuckyServiceKind } from '@/src/types/lucky';
 
 function body(value: LuckyRecord) {
@@ -163,6 +163,9 @@ export async function runServiceAction(kind: LuckyServiceKind, key: string, acti
   }
   if (kind === 'ssl' && action === 'sync') {
     return syncSslCertificate(key);
+  }
+  if (kind === 'ssl' && action === 'flush') {
+    return flushSslCertificate(key);
   }
   throw new Error('不支持的操作');
 }
