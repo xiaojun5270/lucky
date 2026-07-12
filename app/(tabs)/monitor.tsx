@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Boxes, CheckCircle2, Cpu, Download, Gauge, HardDrive, Network, Server, Upload } from 'lucide-react-native';
-import { Platform, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Svg, { Line, Polyline } from 'react-native-svg';
 
-import { EmptyState, ErrorState, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
+import { EmptyState, ErrorState, MetricCard, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
 import { useLuckyStatus } from '@/src/hooks/use-lucky-status';
 import { useAppTheme } from '@/src/lib/theme';
 import { getLuckyDashboard } from '@/src/services/lucky';
@@ -74,7 +74,7 @@ export default function DashboardScreen() {
   return <Page title="总览" subtitle="Lucky 服务运行状态" icon={Gauge} refreshing={query.isFetching} onRefresh={() => query.refetch()}>
     {query.error ? <ErrorState message={query.error.message} retry={() => query.refetch()} /> : null}
     {live.error && !live.data ? <ErrorState message={live.error} /> : null}
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{metrics.map(({ label, value, icon: Icon, color, background }) => <View key={label} style={{ width: '48%', minHeight: 112, borderRadius: 8, backgroundColor: colors.card, borderWidth: Platform.OS === 'ios' ? 0 : 1, borderColor: colors.border, padding: 14, justifyContent: 'space-between' }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: background }}><Icon color={color} size={17} strokeWidth={2.2} /></View><Text style={{ flex: 1, color: colors.subtext, fontSize: 12 }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>{value}</Text></View>)}</View>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>{metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}</View>
 
     {live.data ? <>
       <Panel><SectionHeader icon={Cpu} title="系统资源" meta={`内存 ${memoryPercent.toFixed(1)}%`} /><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}><Legend color={colors.primary} label="系统 CPU" /><Legend color={colors.danger} label="进程 CPU" /><Legend color={colors.success} label="系统内存" /></View><TrendChart samples={history} maxValue={100} series={[
@@ -91,7 +91,7 @@ export default function DashboardScreen() {
       <Panel><SectionHeader icon={HardDrive} title="服务器信息" /><InfoRow label="进程启动时间" value={live.data.runTime || '--'} /><InfoRow label="查询时间" value={live.data.queryTime || '--'} /><InfoRow label="进程已打开句柄数" value={String(live.data.handleCount)} /><InfoRow label="协程数" value={String(live.data.goroutine)} /><InfoRow label="进程占用内存" value={bytes(live.data.processUsedMem)} /><View style={{ height: 1, backgroundColor: colors.rowBorder }} /><InfoRow label="GC 总次数" value={String(live.data.numGc)} /><InfoRow label="堆占用内存" value={bytes(live.data.heapInuse)} /></Panel>
     </> : null}
 
-    <Panel><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Boxes color={colors.primary} size={19} /><Text style={{ flex: 1, color: colors.text, fontSize: 16, fontWeight: '700' }}>模块状态</Text>{query.data?.modules.length ? <Text style={{ color: colors.subtext, fontSize: 11 }}>{query.data.modules.length} 项</Text> : null}</View>
+    <Panel><SectionHeader icon={Boxes} title="模块状态" meta={query.data?.modules.length ? `${query.data.modules.length} 项` : undefined} />
       {query.isLoading ? <Text style={{ color: colors.subtext }}>正在加载...</Text> : query.data?.modules.length ? query.data.modules.map((module, index) => { const name = String(module.Name ?? module.name ?? module.Module ?? module.module ?? `模块 ${index + 1}`); const enabled = module.Enable ?? module.enable; return <View key={String(module.Key ?? module.key ?? index)} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}><View style={{ width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: enabled === false ? colors.mutedCard : colors.successBg }}><Network color={enabled === false ? colors.disabled : colors.success} size={15} /></View><Text style={{ flex: 1, marginLeft: 10, color: colors.text, fontWeight: '600' }}>{name}</Text><View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: enabled === false ? colors.disabled : colors.success }} /><Text style={{ color: enabled === false ? colors.subtext : colors.success, fontSize: 11 }}>{enabled === false ? '已停用' : '运行中'}</Text></View></View>; }) : <EmptyState message="接口未返回模块列表" icon={Boxes} />}
     </Panel>
   </Page>;

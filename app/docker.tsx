@@ -2,7 +2,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image as ExpoImage } from "expo-image";
 import {
   Activity,
+  BadgeInfo,
   Box,
+  CircleCheckBig,
   CircleStop,
   Container,
   Database,
@@ -11,6 +13,7 @@ import {
   Gauge,
   HardDrive,
   Image,
+  Layers3,
   Network,
   Pause,
   Pencil,
@@ -27,12 +30,13 @@ import {
   Wrench,
 } from "lucide-react-native";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   EmptyState,
   ErrorState,
+  MetricCard,
   Page,
   Panel,
   SearchField,
@@ -211,16 +215,16 @@ function DockerDiskSummary({ value }: { value: LuckyRecord }) {
   const volumes = (deepDockerValue(value, "Volumes") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
   const buildCache = (deepDockerValue(value, "BuildCache") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
   const rows = [
-    { label: "镜像层", count: `${images.length} 个镜像`, size: Number(deepDockerValue(value, "LayersSize") ?? sumDockerField(images, "Size")), icon: Image, color: colors.primary },
-    { label: "容器可写层", count: `${containers.length} 个容器`, size: sumDockerField(containers, "SizeRw"), icon: Container, color: colors.success },
-    { label: "数据卷", count: `${volumes.length} 个数据卷`, size: sumDockerField(volumes, "Size"), icon: Database, color: colors.warning },
-    { label: "构建缓存", count: `${buildCache.length} 项缓存`, size: sumDockerField(buildCache, "Size"), icon: Box, color: colors.cyan },
+    { label: "镜像层", count: `${images.length} 个镜像`, size: Number(deepDockerValue(value, "LayersSize") ?? sumDockerField(images, "Size")), icon: Layers3, color: colors.primary, background: colors.primarySoft },
+    { label: "容器可写层", count: `${containers.length} 个容器`, size: sumDockerField(containers, "SizeRw"), icon: Container, color: colors.success, background: colors.successBg },
+    { label: "数据卷", count: `${volumes.length} 个数据卷`, size: sumDockerField(volumes, "Size"), icon: Database, color: colors.warning, background: colors.warningBg },
+    { label: "构建缓存", count: `${buildCache.length} 项缓存`, size: sumDockerField(buildCache, "Size"), icon: Box, color: colors.cyan, background: colors.cyanBg },
   ];
   return <View style={{ gap: 0 }}>
-    {rows.map(({ label, count, size, icon: Icon }, index) => <View key={label} style={{ minHeight: 58, flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}>
-      <Icon color={rows[index].color} size={18} />
+    {rows.map(({ label, count, size, icon: Icon, color, background }, index) => <View key={label} style={{ minHeight: 64, flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}>
+      <View style={{ width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: background }}><Icon color={color} size={17} strokeWidth={2.2} /></View>
       <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>{label}</Text><Text style={{ color: colors.subtext, fontSize: 11, marginTop: 3 }}>{count}</Text></View>
-      <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{size > 0 ? bytes(size) : "0 B"}</Text>
+      <View style={{ paddingHorizontal: 9, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.mutedCard }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{size > 0 ? bytes(size) : "0 B"}</Text></View>
     </View>)}
   </View>;
 }
@@ -1361,44 +1365,11 @@ export default function DockerScreen() {
           <SectionHeader icon={Gauge} title="Docker 总览" />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             {[
-              ["运行状态", typeof overview.data.monitor === "boolean" ? (overview.data.monitor ? "正常" : "已停用") : String(overview.data.monitor ?? "正常"), Activity],
-              [
-                "版本",
-                String(overview.data.version ?? "--"),
-                Box,
-              ],
-              [
-                "容器",
-                String(overview.data.containerCount),
-                Container,
-              ],
-              ["镜像", String(overview.data.imageCount), Image],
-            ].map(([label, value, Icon]) => (
-              <Panel key={String(label)}>
-                <View style={{ width: 130, minHeight: 64 }}>
-                  <Icon color={colors.primary} size={18} />
-                  <Text
-                    style={{
-                      color: colors.subtext,
-                      fontSize: 11,
-                      marginTop: 7,
-                    }}
-                  >
-                    {String(label)}
-                  </Text>
-                  <Text
-                    numberOfLines={2}
-                    style={{
-                      color: colors.text,
-                      fontWeight: "800",
-                      marginTop: 3,
-                    }}
-                  >
-                    {String(value || "--")}
-                  </Text>
-                </View>
-              </Panel>
-            ))}
+              { label: "运行状态", value: typeof overview.data.monitor === "boolean" ? (overview.data.monitor ? "正常" : "已停用") : String(overview.data.monitor ?? "正常"), icon: overview.data.monitor === false ? CircleStop : CircleCheckBig, color: overview.data.monitor === false ? colors.danger : colors.success, background: overview.data.monitor === false ? colors.dangerBg : colors.successBg, valueColor: overview.data.monitor === false ? colors.danger : colors.success },
+              { label: "版本", value: String(overview.data.version ?? "--"), icon: BadgeInfo, color: colors.primary, background: colors.primarySoft, valueColor: colors.text },
+              { label: "容器", value: String(overview.data.containerCount ?? 0), icon: Container, color: colors.cyan, background: colors.cyanBg },
+              { label: "镜像", value: String(overview.data.imageCount ?? 0), icon: Layers3, color: colors.warning, background: colors.warningBg },
+            ].map((metric) => <MetricCard key={metric.label} {...metric} />)}
           </View>
           <Panel>
             <SectionHeader icon={HardDrive} title="磁盘占用" />
