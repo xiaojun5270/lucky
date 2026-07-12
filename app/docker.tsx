@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Image as ExpoImage } from "expo-image";
 import {
   Activity,
   Box,
@@ -25,8 +26,8 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { Alert, Image as NativeImage, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -286,11 +287,12 @@ function containerIcon(item: LuckyRecord, icons: LuckyRecord[]) {
 function ContainerArtwork({ item, icons, running, size = 44 }: { item: LuckyRecord; icons: LuckyRecord[]; running: boolean; size?: number }) {
   const colors = useAppTheme();
   const [failed, setFailed] = useState(false);
-  const icon = containerIcon(item, icons);
+  const icon = useMemo(() => containerIcon(item, icons), [item, icons]);
   const external = /^(https?:|data:|file:)/i.test(icon);
   const uri = !icon ? "" : external
     ? icon
     : `${luckySessionState.baseUrl.replace(/\/$/, "")}/api/iconlib/icon?path=${encodeURIComponent(icon)}`;
+  useEffect(() => setFailed(false), [uri]);
   if (!uri || failed) return (
     <View style={{ width: size, height: size, borderRadius: 8, backgroundColor: running ? "#7c3aed" : colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
       <Container color={running ? "#ffffff" : colors.disabled} size={Math.round(size * 0.45)} />
@@ -298,10 +300,13 @@ function ContainerArtwork({ item, icons, running, size = 44 }: { item: LuckyReco
   );
   return (
     <View style={{ width: size, height: size, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      <NativeImage
+      <ExpoImage
         source={{ uri, headers: external || !luckySessionState.token ? undefined : { "Lucky-Admin-Token": luckySessionState.token } }}
         onError={() => setFailed(true)}
-        resizeMode="contain"
+        contentFit="contain"
+        cachePolicy="memory-disk"
+        recyclingKey={uri}
+        transition={120}
         style={{ width: size - 6, height: size - 6 }}
       />
     </View>
@@ -446,6 +451,7 @@ export default function DockerScreen() {
   const colors = useAppTheme();
   const [view, setView] = useState<DockerView>("containers");
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [editor, setEditor] = useState<Editor>();
   const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
@@ -616,11 +622,11 @@ export default function DockerScreen() {
                 ? tasks.data?.items
                 : [];
   const filtered = useMemo(() => {
-    const word = search.trim().toLowerCase();
+    const word = deferredSearch.trim().toLowerCase();
     return (source ?? []).filter(
       (item) => !word || JSON.stringify(item).toLowerCase().includes(word),
     );
-  }, [source, search]);
+  }, [source, deferredSearch]);
   const danger = (title: string, message: string, action: () => void) =>
     Alert.alert(title, message, [
       { text: "取消", style: "cancel" },

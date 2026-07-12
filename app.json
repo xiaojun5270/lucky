@@ -51,10 +51,14 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-image"
     ],
     "extra": {
       "router": {}
+    },
+    "experiments": {
+      "reactCompiler": true
     },
     "scheme": "luckymobile"
   }

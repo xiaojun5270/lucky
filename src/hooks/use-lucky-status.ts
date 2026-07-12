@@ -1,7 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { Field, Root, Type } from 'protobufjs/light';
 import { ungzip } from 'pako';
-import { useCallback, useState } from 'react';
+import { startTransition, useCallback, useState } from 'react';
 
 import { refreshLuckyToken } from '@/src/lib/lucky-fetch';
 import { endLuckySession, luckySessionState } from '@/src/store/lucky-session';
@@ -131,7 +131,7 @@ export function useLuckyStatus() {
         const next = decodeStatus(await messageBytes(message));
         if (!disposed) {
           lastStatusUpdate = Date.now();
-          setData(next);
+          startTransition(() => setData(next));
           setConnected(true);
           setError('');
         }
