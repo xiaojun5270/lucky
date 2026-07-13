@@ -385,7 +385,7 @@ function DockerFormEditor({
   const colors = useAppTheme();
   const [value, setValue] = useState(() => clone(editor.value));
   return (
-    <Modal transparent animationType="slide" onRequestClose={close}>
+    <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={close}>
       <SafeAreaView
         style={{
           flex: 1,
@@ -401,7 +401,7 @@ function DockerFormEditor({
             width: "100%",
             maxWidth: 720,
             minHeight: "52%",
-            maxHeight: "84%",
+            maxHeight: "76%",
             alignSelf: "center",
             backgroundColor: colors.card,
             borderRadius: 20,
@@ -1609,7 +1609,7 @@ export default function DockerScreen() {
         />
       ) : null}
       {containerMenu ? (
-        <Modal transparent animationType="slide" onRequestClose={() => setContainerMenu(undefined)}>
+        <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={() => setContainerMenu(undefined)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end", paddingHorizontal: 12, paddingBottom: 10 }}>
             <Pressable style={{ flex: 1 }} onPress={() => setContainerMenu(undefined)} />
             <View style={{ width: "100%", maxWidth: 720, alignSelf: "center", backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 6 }}>

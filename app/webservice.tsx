@@ -465,7 +465,7 @@ function WebServiceEditor({
   }
 
   return (
-    <Modal animationType="slide" transparent onRequestClose={onClose}>
+    <Modal animationType="slide" presentationStyle="overFullScreen" transparent onRequestClose={onClose}>
       <SafeAreaView
         style={{
           flex: 1,
@@ -480,7 +480,7 @@ function WebServiceEditor({
           style={{
             width: "100%",
             maxWidth: 720,
-            maxHeight: "84%",
+            maxHeight: "76%",
             minHeight: "52%",
             alignSelf: "center",
             backgroundColor: colors.card,
@@ -1597,7 +1597,7 @@ export default function WebServiceScreen() {
         />
       ) : null}
       {folderTarget ? (
-        <Modal transparent animationType="fade" onRequestClose={() => setFolderTarget(undefined)}>
+        <Modal transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={() => setFolderTarget(undefined)}>
           <SafeAreaView
             style={{
               flex: 1,

@@ -79,10 +79,10 @@ type ServiceEditor = { type: 'item' | 'settings'; title: string; value: LuckyRec
 function ServiceFormEditor({ editor, busy, close, save }: { editor: ServiceEditor; busy: boolean; close: () => void; save: (value: LuckyRecord) => void }) {
   const colors = useAppTheme();
   const [value, setValue] = useState(() => JSON.parse(JSON.stringify(editor.value)) as LuckyRecord);
-  return <Modal transparent animationType="slide" onRequestClose={close}>
+  return <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={close}>
     <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}>
       <Pressable style={{ flex: 1 }} onPress={close} />
-      <View style={{ width: '100%', maxWidth: 720, minHeight: '50%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+      <View style={{ width: '100%', maxWidth: 720, minHeight: '50%', maxHeight: '76%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
         <SheetHandle />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={Settings2} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>{editor.title}</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 4 }} style={{ flex: 1 }}><StructuredForm value={value} onChange={setValue} /></ScrollView>
@@ -178,10 +178,10 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
     });
   }
 
-  return <Modal transparent animationType="slide" onRequestClose={close}>
+  return <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={close}>
     <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}>
       <Pressable style={{ flex: 1 }} onPress={close} />
-      <View style={{ width: '100%', maxWidth: 720, minHeight: '52%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+      <View style={{ width: '100%', maxWidth: 720, minHeight: '52%', maxHeight: '76%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
         <SheetHandle />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} />
@@ -296,7 +296,7 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
     save({ ...initial, Remark: remark.trim(), AddFrom: 'acme', Domains: domains, ExtParams: { ...ext, [existingKey(['acmeDomains', 'Domains'])]: domains }, SyncAllClients: syncAll, SyncClients: syncKeys, SyncInfo: { ...initialSync, SyncAllClients: syncAll, SyncClients: syncKeys } });
   }
 
-  return <Modal transparent animationType="slide" onRequestClose={close}><SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}><Pressable style={{ flex: 1 }} onPress={close} /><View style={{ width: '100%', maxWidth: 720, minHeight: '58%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+  return <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={close}><SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}><Pressable style={{ flex: 1 }} onPress={close} /><View style={{ width: '100%', maxWidth: 720, minHeight: '58%', maxHeight: '78%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
     <SheetHandle />
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>编辑证书</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
