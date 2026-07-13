@@ -40,6 +40,31 @@ function record(payload: LuckyRecord, keys: string[]) {
   return payload;
 }
 
+export const newWebServiceDefaultProxy = (): LuckyRecord => ({
+  Key: "default",
+  GroupKey: "",
+  WebServiceType: "reverseproxy",
+  Locations: [],
+  CorazaWAFInstance: "",
+  SafeIPMode: "blacklist",
+  EasyLucky: false,
+  LocationInsecureSkipVerify: true,
+  UseTargetHost: false,
+  AutoProxyLocation: false,
+  AutoProxyLocationWithoutSameHost: false,
+  EnableAccessLog: true,
+  LogLevel: 4,
+  AccessLogMaxNum: 256,
+  WebListShowLastLogMaxCount: 10,
+  RequestInfoLogFormat:
+    "[#{clientIP}][#{remoteIP}]#{tab}[#{method}][#{host}#{url}]",
+  RemoteIPHeaders: ["X-Forwarded-For", "X-Real-IP"],
+  EnableBasicAuth: false,
+  BasicAuthUserList: "",
+  UseRuleGlobalAuthSettings: false,
+  OtherParams: { WebAuth: false },
+});
+
 export const newWebServiceRule = (): LuckyRecord => ({
   RuleName: "",
   RuleKey: "",
@@ -48,24 +73,14 @@ export const newWebServiceRule = (): LuckyRecord => ({
   Network: "tcp6",
   ListenIP: "",
   ListenPort: 16666,
+  IPFilterRule: "disable",
+  CorazaWAFInstance: "",
   AutoOptionsFirewall: true,
   EnableTLS: false,
   TLSMinVersion: 2,
   MaxHeaderKBytes: 32,
   Http3: false,
-  DefaultProxy: {
-    Key: "default",
-    WebServiceType: "reverseproxy",
-    Locations: [],
-    EnableAccessLog: false,
-    LogLevel: 4,
-    AccessLogMaxNum: 256,
-    WebListShowLastLogMaxCount: 10,
-    LocationInsecureSkipVerify: true,
-    RemoteIPHeaders: ["X-Forwarded-For", "X-Real-IP"],
-    EasyLucky: true,
-    OtherParams: {},
-  },
+  DefaultProxy: newWebServiceDefaultProxy(),
   ProxyList: [],
 });
 
@@ -73,16 +88,17 @@ export const newWebServiceSubRule = (): LuckyRecord => ({
   Enable: true,
   Key: "",
   Remark: "",
-  DiaglogShowMode: "simple",
   GroupKey: "",
   WebServiceType: "reverseproxy",
   Domains: [""],
   Locations: [""],
-  CorazaWAFKey: "",
+  CorazaWAFInstance: "",
+  SafeIPMode: "blacklist",
   LocationInsecureSkipVerify: true,
   UseTargetHost: false,
-  AutoRedirect: false,
-  EnableAccessLog: false,
+  AutoProxyLocation: false,
+  AutoProxyLocationWithoutSameHost: false,
+  EnableAccessLog: true,
   LogLevel: 4,
   AccessLogMaxNum: 256,
   WebListShowLastLogMaxCount: 10,
@@ -91,15 +107,19 @@ export const newWebServiceSubRule = (): LuckyRecord => ({
   RemoteIPHeaders: ["X-Forwarded-For", "X-Real-IP"],
   EasyLucky: true,
   EnableBasicAuth: false,
-  BasicAuthUser: "",
-  BasicAuthPasswd: "",
-  EnableWebAuth: false,
-  OtherParams: {},
+  BasicAuthUserList: "",
+  UseRuleGlobalAuthSettings: false,
+  OtherParams: { WebAuth: false },
 });
 
 export async function getWebServiceCorazaInstances() {
   const payload = await luckyFetch("/api/coraza/instancelist");
   return list(payload, ["list", "instanceList", "instances"]);
+}
+
+export async function getWebServiceIpFilterRules() {
+  const payload = await luckyFetch("/api/ipfliter/list");
+  return list(payload, ["list", "rules", "ruleList"]);
 }
 
 export const newWebServiceGroup = (): LuckyRecord => ({ Key: "", Name: "" });
