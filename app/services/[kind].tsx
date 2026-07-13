@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, Page, Panel } from '@/src/components/lucky-ui';
+import { EmptyState, ErrorState, IconTile, Page, Panel, SheetHandle } from '@/src/components/lucky-ui';
 import { StructuredDataView, StructuredForm } from '@/src/components/structured-form';
 import { queryClient } from '@/src/lib/query-client';
 import { useAppTheme } from '@/src/lib/theme';
@@ -80,11 +80,13 @@ function ServiceFormEditor({ editor, busy, close, save }: { editor: ServiceEdito
   const colors = useAppTheme();
   const [value, setValue] = useState(() => JSON.parse(JSON.stringify(editor.value)) as LuckyRecord);
   return <Modal transparent animationType="slide" onRequestClose={close}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end' }}>
-      <View style={{ minHeight: '58%', maxHeight: '88%', backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: 18, gap: 13 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><Settings2 color={colors.primary} size={19} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>{editor.title}</Text><Pressable onPress={close}><Text style={{ color: colors.primary, fontWeight: '700' }}>取消</Text></Pressable></View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}>
+      <Pressable style={{ flex: 1 }} onPress={close} />
+      <View style={{ width: '100%', maxWidth: 720, minHeight: '50%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+        <SheetHandle />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={Settings2} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>{editor.title}</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 4 }} style={{ flex: 1 }}><StructuredForm value={value} onChange={setValue} /></ScrollView>
-        <Pressable disabled={busy} onPress={() => save(value)} style={{ height: 48, borderRadius: 8, backgroundColor: busy ? colors.disabled : colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中' : '保存'}</Text></Pressable>
+        <Pressable disabled={busy} onPress={() => save(value)} style={{ height: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中' : '保存'}</Text></Pressable>
       </View>
     </SafeAreaView>
   </Modal>;
@@ -113,7 +115,7 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
     { label: '文件路径', value: 'path' },
     { label: 'ACME 自动签发', value: 'acme' },
   ];
-  const inputStyle = { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, color: colors.text, paddingHorizontal: 12 } as const;
+  const inputStyle = { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, color: colors.text, paddingHorizontal: 12 } as const;
 
   function clientKey(item: LuckyListItem, index: number) {
     return pick(item, ['Key', 'ClientKey', 'key', 'ID', 'id'], String(index));
@@ -177,12 +179,14 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
   }
 
   return <Modal transparent animationType="slide" onRequestClose={close}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
-      <View style={{ minHeight: '58%', maxHeight: '90%', backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: 18, gap: 13 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}>
+      <Pressable style={{ flex: 1 }} onPress={close} />
+      <View style={{ width: '100%', maxWidth: 720, minHeight: '52%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+        <SheetHandle />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-          <View style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successBg }}><ShieldCheck color={colors.success} size={18} /></View>
+          <IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} />
           <Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>添加证书</Text>
-          <Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable>
+          <Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable>
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
           <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>证书备注</Text><TextInput value={remark} onChangeText={setRemark} placeholder="可留空" placeholderTextColor={colors.placeholder} style={inputStyle} /></View>
@@ -204,7 +208,7 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
           </View>
           {error ? <ErrorState message={error} /> : null}
         </ScrollView>
-        <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy || Boolean(fileBusy)} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 8, backgroundColor: busy || fileBusy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Plus color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '添加中...' : '添加'}</Text></Pressable></View>
+        <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy || Boolean(fileBusy)} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 12, backgroundColor: busy || fileBusy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Plus color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '添加中...' : '添加'}</Text></Pressable></View>
       </View>
     </SafeAreaView>
   </Modal>;
@@ -223,7 +227,7 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
   });
   const [openSelect, setOpenSelect] = useState('');
   const [error, setError] = useState('');
-  const inputStyle = { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, color: colors.text, paddingHorizontal: 12 } as const;
+  const inputStyle = { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, color: colors.text, paddingHorizontal: 12 } as const;
   const dns = childRecord(ext, 'DNS');
 
   function existingKey(keys: string[]) {
@@ -292,8 +296,9 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
     save({ ...initial, Remark: remark.trim(), AddFrom: 'acme', Domains: domains, ExtParams: { ...ext, [existingKey(['acmeDomains', 'Domains'])]: domains }, SyncAllClients: syncAll, SyncClients: syncKeys, SyncInfo: { ...initialSync, SyncAllClients: syncAll, SyncClients: syncKeys } });
   }
 
-  return <Modal transparent animationType="slide" onRequestClose={close}><SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}><View style={{ minHeight: '68%', maxHeight: '94%', backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: 18, gap: 13 }}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.successBg }}><ShieldCheck color={colors.success} size={18} /></View><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>编辑证书</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
+  return <Modal transparent animationType="slide" onRequestClose={close}><SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 10 }}><Pressable style={{ flex: 1 }} onPress={close} /><View style={{ width: '100%', maxWidth: 720, minHeight: '58%', maxHeight: '84%', alignSelf: 'center', backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 13 }}>
+    <SheetHandle />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>编辑证书</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
       <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>证书备注</Text><TextInput value={remark} onChangeText={setRemark} style={inputStyle} /></View>
       {SelectField({ label: '添加方式', keys: ['AddFrom'], options: [{ label: 'ACME', value: 'acme' }] })}
@@ -315,7 +320,7 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
       <View style={{ gap: 11, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}><Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>证书同步</Text><View style={{ minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 10 }}><Text style={{ flex: 1, color: colors.text, fontSize: 13 }}>同步到所有同步客户端</Text><Switch value={syncAll} onValueChange={setSyncAll} trackColor={{ false: colors.disabled, true: colors.primary }} /></View>{!syncAll ? <View style={{ gap: 7 }}>{syncClients.length ? syncClients.map((client, index) => { const key = clientKey(client, index); const active = selectedClients.includes(key); return <Pressable key={key} onPress={() => toggleClient(key)} style={{ minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primarySoft : colors.card, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1, borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primary : colors.card, alignItems: 'center', justifyContent: 'center' }}>{active ? <Check color="#fff" size={13} /> : null}</View><Text style={{ flex: 1, color: colors.text }}>{pick(client, ['Name', 'ClientName', 'DeviceName'], key)}</Text></Pressable>; }) : <Text style={{ color: colors.subtext, fontSize: 12 }}>暂无可用同步客户端</Text>}</View> : null}</View>
       {error ? <ErrorState message={error} /> : null}
     </ScrollView>
-    <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 8, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中...' : '修改'}</Text></Pressable></View>
+    <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中...' : '修改'}</Text></Pressable></View>
   </View></SafeAreaView></Modal>;
 }
 

@@ -40,9 +40,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorState,
+  IconTile,
   Page,
   Panel,
   SectionHeader,
+  SheetHandle,
 } from "@/src/components/lucky-ui";
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
@@ -288,7 +290,7 @@ function WebServiceEditor({
           }}
           style={{
             minHeight: multiline ? 92 : 44,
-            borderRadius: 8,
+            borderRadius: 12,
             borderWidth: 1,
             borderColor: colors.border,
             backgroundColor: readOnly ? colors.mutedCard : colors.card,
@@ -341,7 +343,7 @@ function WebServiceEditor({
                   minWidth: 76,
                   height: 38,
                   paddingHorizontal: 12,
-                  borderRadius: 8,
+                  borderRadius: 12,
                   borderWidth: 1,
                   borderColor: selected ? colors.primary : colors.border,
                   backgroundColor: selected ? colors.primarySoft : colors.card,
@@ -366,11 +368,11 @@ function WebServiceEditor({
     const open = openSelect === field;
     return <View style={{ gap: 7 }}>
       <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{label}</Text>
-      <Pressable onPress={() => setOpenSelect(open ? "" : field)} style={{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: open ? colors.primary : colors.border, backgroundColor: colors.card, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Pressable onPress={() => setOpenSelect(open ? "" : field)} style={{ height: 44, borderRadius: 12, borderWidth: 1, borderColor: open ? colors.primary : colors.border, backgroundColor: colors.card, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Text numberOfLines={1} style={{ flex: 1, color: selected ? colors.text : colors.placeholder, fontSize: 13 }}>{selected?.label ?? "请选择"}</Text>
         <ChevronDown color={open ? colors.primary : colors.subtext} size={17} />
       </Pressable>
-      {open ? <View style={{ borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: "hidden" }}>
+      {open ? <View style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: "hidden" }}>
         {options.map((option, index) => {
           const active = option.value === current;
           return <Pressable key={option.value || "empty"} onPress={() => { update(field, option.value); setOpenSelect(""); }} style={{ minHeight: 42, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 9, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, backgroundColor: active ? colors.primarySoft : colors.card }}>
@@ -383,7 +385,7 @@ function WebServiceEditor({
   }
 
   function FormSection({ title, children }: { title: string; children: ReactNode }) {
-    return <View style={{ gap: 10, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
+    return <View style={{ gap: 10, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
       <Text style={{ color: colors.text, fontSize: 14, fontWeight: "800" }}>{title}</Text>
       {children}
     </View>;
@@ -469,21 +471,29 @@ function WebServiceEditor({
           flex: 1,
           backgroundColor: "rgba(0,0,0,0.42)",
           justifyContent: "flex-end",
+          paddingHorizontal: 12,
+          paddingBottom: 10,
         }}
       >
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
         <View
           style={{
-            maxHeight: "88%",
-            minHeight: "56%",
+            width: "100%",
+            maxWidth: 720,
+            maxHeight: "84%",
+            minHeight: "52%",
+            alignSelf: "center",
             backgroundColor: colors.card,
-            borderTopLeftRadius: 8,
-            borderTopRightRadius: 8,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
             padding: 18,
             gap: 13,
           }}
         >
+          <SheetHandle />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-            <FileCog color={colors.primary} size={20} />
+            <IconTile icon={FileCog} size={36} iconSize={18} />
             <Text
               style={{
                 flex: 1,
@@ -494,7 +504,7 @@ function WebServiceEditor({
             >
               {editor.title}
             </Text>
-            <Pressable accessibilityLabel="关闭" onPress={onClose} style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+            <Pressable accessibilityLabel="关闭" onPress={onClose} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
               <X color={colors.subtext} size={18} />
             </Pressable>
           </View>
@@ -507,10 +517,10 @@ function WebServiceEditor({
             {formError ? <ErrorState message={formError} /> : null}
           </ScrollView>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable disabled={busy} onPress={onClose} style={{ flex: 1, minHeight: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}>
+            <Pressable disabled={busy} onPress={onClose} style={{ flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}>
               <Text style={{ color: colors.subtext, fontWeight: "700" }}>取消</Text>
             </Pressable>
-            <Pressable disabled={busy} onPress={save} style={{ flex: 1.4, minHeight: 48, borderRadius: 8, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }}>
+            <Pressable disabled={busy} onPress={save} style={{ flex: 1.4, minHeight: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }}>
               <Save color="#fff" size={17} />
               <Text style={{ color: "#fff", fontWeight: "800" }}>
                 {busy ? "保存中" : editor.type === "subrule" ? (editor.key ? "保存子规则" : "添加子规则") : "保存配置"}
@@ -1598,14 +1608,19 @@ export default function WebServiceScreen() {
           >
             <View
               style={{
+                width: "100%",
+                maxWidth: 520,
+                alignSelf: "center",
                 backgroundColor: colors.card,
-                borderRadius: 8,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: colors.border,
                 padding: 18,
                 gap: 14,
               }}
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-                <FolderUp color={colors.warning} size={20} />
+                <IconTile icon={FolderUp} color={colors.warning} background={colors.warningBg} size={36} iconSize={18} />
                 <Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: "800" }}>
                   更新文件服务目录
                 </Text>
@@ -1620,7 +1635,7 @@ export default function WebServiceScreen() {
                   keyboardType="number-pad"
                   style={{
                     height: 44,
-                    borderRadius: 8,
+                    borderRadius: 12,
                     backgroundColor: colors.mutedCard,
                     color: colors.text,
                     paddingHorizontal: 12,
@@ -1637,7 +1652,7 @@ export default function WebServiceScreen() {
                   style={{
                     flex: 1,
                     height: 44,
-                    borderRadius: 8,
+                    borderRadius: 12,
                     borderWidth: 1,
                     borderColor: colors.border,
                     alignItems: "center",
@@ -1652,7 +1667,7 @@ export default function WebServiceScreen() {
                   style={{
                     flex: 1,
                     height: 44,
-                    borderRadius: 8,
+                    borderRadius: 12,
                     backgroundColor: uploadBusy ? colors.disabled : colors.primary,
                     alignItems: "center",
                     justifyContent: "center",

@@ -22,10 +22,10 @@ function surfaceShadow(platform: typeof Platform.OS) {
 export function Page({ title, subtitle, icon: Icon, children, refreshing, onRefresh, safeTop = true }: { title: string; subtitle?: string; icon?: LucideIcon; children: ReactNode; refreshing?: boolean; onRefresh?: () => void; safeTop?: boolean }) {
   const colors = useAppTheme();
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }} edges={safeTop ? ['top'] : []}>
-    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" removeClippedSubviews={Platform.OS === 'android'} contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 110, gap: 18 }}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" removeClippedSubviews={Platform.OS === 'android'} contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 110, gap: 16 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>{Icon ? <IconTile icon={Icon} size={44} iconSize={22} /> : null}<View style={{ flex: 1, gap: 2 }}><Text style={{ color: colors.text, fontSize: 30, fontWeight: '800' }}>{title}</Text>{subtitle ? <Text style={{ color: colors.subtext, fontSize: 13, lineHeight: 18 }}>{subtitle}</Text> : null}</View></View>
-        {onRefresh ? <Pressable accessibilityLabel="刷新" onPress={onRefresh} disabled={refreshing} style={({ pressed }) => ({ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.card, borderWidth: Platform.OS === 'ios' ? 0 : 1, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: Platform.OS === 'ios' || Platform.OS === 'web' ? 0.07 : 0, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: Platform.OS === 'android' ? 1 : 0, opacity: pressed ? 0.55 : 1 })}>{refreshing ? <ActivityIndicator color={colors.primary} /> : <RefreshCw color={colors.primary} size={19} strokeWidth={2.2} />}</Pressable> : null}
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>{Icon ? <IconTile icon={Icon} size={42} iconSize={21} /> : null}<View style={{ flex: 1, gap: 2 }}><Text style={{ color: colors.text, fontSize: 28, lineHeight: 34, fontWeight: '800' }}>{title}</Text>{subtitle ? <Text style={{ color: colors.subtext, fontSize: 13, lineHeight: 18 }}>{subtitle}</Text> : null}</View></View>
+        {onRefresh ? <Pressable accessibilityLabel="刷新" onPress={onRefresh} disabled={refreshing} style={({ pressed }) => ({ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS), opacity: pressed ? 0.55 : 1 })}>{refreshing ? <ActivityIndicator color={colors.primary} /> : <RefreshCw color={colors.primary} size={19} strokeWidth={2.2} />}</Pressable> : null}
       </View>
       {children}
     </ScrollView>
@@ -44,7 +44,7 @@ export function IconTile({ icon: Icon, color, background, size = 36, iconSize = 
 
 export function MetricCard({ icon, label, value, color, background, valueColor }: { icon: LucideIcon; label: string; value: string; color: string; background: string; valueColor?: string }) {
   const colors = useAppTheme();
-  return <View style={{ flexGrow: 1, flexBasis: 150, minHeight: 126, borderRadius: CARD_RADIUS, padding: 16, justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS) }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><IconTile icon={icon} color={color} background={background} /><Text style={{ flex: 1, color: colors.subtext, fontSize: 13, fontWeight: '600' }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: valueColor ?? colors.text, fontSize: 24, fontWeight: '800' }}>{value || '--'}</Text></View>;
+  return <View style={{ flexGrow: 1, flexBasis: 150, minHeight: 140, borderRadius: CARD_RADIUS, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS) }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><IconTile icon={icon} color={color} background={background} /><Text numberOfLines={1} style={{ flex: 1, color: colors.subtext, fontSize: 13, lineHeight: 18, fontWeight: '600' }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.72} style={{ marginTop: 'auto', color: valueColor ?? colors.text, fontSize: 22, lineHeight: 29, fontWeight: '800' }}>{value || '--'}</Text></View>;
 }
 
 export function EmptyState({ message, icon: Icon = Inbox }: { message: string; icon?: LucideIcon }) {
@@ -59,7 +59,12 @@ export function ErrorState({ message, retry }: { message: string; retry?: () => 
 
 export function SectionHeader({ icon: Icon, title, meta }: { icon: LucideIcon; title: string; meta?: string }) {
   const colors = useAppTheme();
-  return <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={Icon} size={30} iconSize={15} /><Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' }}>{title}</Text>{meta ? <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.mutedCard }}><Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '600' }}>{meta}</Text></View> : null}</View>;
+  return <View style={{ minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={Icon} size={32} iconSize={16} /><Text style={{ flex: 1, color: colors.text, fontSize: 16, lineHeight: 21, fontWeight: '700' }}>{title}</Text>{meta ? <View style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, backgroundColor: colors.mutedCard }}><Text style={{ color: colors.subtext, fontSize: 11, fontWeight: '600' }}>{meta}</Text></View> : null}</View>;
+}
+
+export function SheetHandle() {
+  const colors = useAppTheme();
+  return <View accessibilityElementsHidden style={{ width: 38, height: 5, borderRadius: 3, backgroundColor: colors.muted, alignSelf: 'center', marginTop: -5, marginBottom: 2 }} />;
 }
 
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {

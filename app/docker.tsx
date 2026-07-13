@@ -28,6 +28,7 @@ import {
   UploadCloud,
   Workflow,
   Wrench,
+  X,
 } from "lucide-react-native";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -36,11 +37,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorState,
+  IconTile,
   MetricCard,
   Page,
   Panel,
   SearchField,
   SectionHeader,
+  SheetHandle,
 } from "@/src/components/lucky-ui";
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
@@ -388,21 +391,29 @@ function DockerFormEditor({
           flex: 1,
           backgroundColor: "rgba(0,0,0,0.42)",
           justifyContent: "flex-end",
+          paddingHorizontal: 12,
+          paddingBottom: 10,
         }}
       >
+        <Pressable style={{ flex: 1 }} onPress={close} />
         <View
           style={{
-            minHeight: "60%",
-            maxHeight: "88%",
+            width: "100%",
+            maxWidth: 720,
+            minHeight: "52%",
+            maxHeight: "84%",
+            alignSelf: "center",
             backgroundColor: colors.card,
-            borderTopLeftRadius: 8,
-            borderTopRightRadius: 8,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
             padding: 18,
             gap: 13,
           }}
         >
+          <SheetHandle />
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Wrench color={colors.primary} size={20} />
+            <IconTile icon={Wrench} size={36} iconSize={18} />
             <Text
               style={{
                 flex: 1,
@@ -414,10 +425,8 @@ function DockerFormEditor({
             >
               {editor.title}
             </Text>
-            <Pressable onPress={close}>
-              <Text style={{ color: colors.subtext, fontWeight: "700" }}>
-                取消
-              </Text>
+            <Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+              <X color={colors.subtext} size={18} />
             </Pressable>
           </View>
           <ScrollView
@@ -432,7 +441,7 @@ function DockerFormEditor({
             onPress={() => save(value)}
             style={{
               height: 48,
-              borderRadius: 8,
+              borderRadius: 12,
               backgroundColor: busy ? colors.disabled : colors.primary,
               flexDirection: "row",
               alignItems: "center",
@@ -1601,15 +1610,16 @@ export default function DockerScreen() {
       ) : null}
       {containerMenu ? (
         <Modal transparent animationType="slide" onRequestClose={() => setContainerMenu(undefined)}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end", paddingHorizontal: 12, paddingBottom: 10 }}>
             <Pressable style={{ flex: 1 }} onPress={() => setContainerMenu(undefined)} />
-            <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: 18, gap: 6 }}>
+            <View style={{ width: "100%", maxWidth: 720, alignSelf: "center", backgroundColor: colors.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 6 }}>
+              <SheetHandle />
               <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 8 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>更多操作</Text>
                   <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 12, marginTop: 3 }}>{containerMenu.name}</Text>
                 </View>
-                <Pressable onPress={() => setContainerMenu(undefined)}><Text style={{ color: colors.primary, fontWeight: "700" }}>完成</Text></Pressable>
+                <Pressable accessibilityLabel="关闭" onPress={() => setContainerMenu(undefined)} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}><X color={colors.subtext} size={18} /></Pressable>
               </View>
               {[
                 ...(containerMenu.running && !containerMenu.paused ? [{ icon: Pause, label: "暂停容器", color: colors.warning, action: () => mutation.mutate({ type: "container-pause", key: containerMenu.key }) }] : []),
@@ -1626,7 +1636,7 @@ export default function DockerScreen() {
                   onPress={() => { setContainerMenu(undefined); action(); }}
                   style={({ pressed }) => ({ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, opacity: pressed ? 0.5 : 1 })}
                 >
-                  <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}><Icon color={color} size={17} /></View>
+                  <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}><Icon color={color} size={17} /></View>
                   <Text style={{ flex: 1, color, fontSize: 15, fontWeight: "600" }}>{label}</Text>
                 </Pressable>
               ))}

@@ -118,7 +118,7 @@ function PrimitiveField({
         autoCorrect={false}
         style={{
           minHeight: multiline ? 112 : 44,
-          borderRadius: 8,
+          borderRadius: 12,
           borderWidth: 1,
           borderColor: colors.border,
           backgroundColor: colors.card,
@@ -141,7 +141,7 @@ function AddField({ onAdd }: { onAdd: (key: string, value: unknown) => void }) {
   if (!open) return (
     <Pressable
       onPress={() => setOpen(true)}
-      style={{ height: 38, borderRadius: 8, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+      style={{ height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
     >
       <Plus color={colors.primary} size={15} />
       <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>添加字段</Text>
@@ -156,17 +156,17 @@ function AddField({ onAdd }: { onAdd: (key: string, value: unknown) => void }) {
         placeholder="字段名称"
         placeholderTextColor={colors.placeholder}
         autoCapitalize="none"
-        style={{ height: 42, borderRadius: 8, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 11 }}
+        style={{ height: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 11 }}
       />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {options.map(([value, label]) => <Pressable
           key={value}
           onPress={() => setKind(value)}
-          style={{ paddingHorizontal: 10, height: 34, borderRadius: 8, borderWidth: 1, borderColor: kind === value ? colors.primary : colors.border, backgroundColor: kind === value ? colors.primarySoft : colors.card, alignItems: "center", justifyContent: "center" }}
+          style={{ paddingHorizontal: 10, height: 36, borderRadius: 10, borderWidth: 1, borderColor: kind === value ? colors.primary : colors.border, backgroundColor: kind === value ? colors.primarySoft : colors.card, alignItems: "center", justifyContent: "center" }}
         ><Text style={{ color: kind === value ? colors.primary : colors.text, fontSize: 11, fontWeight: "700" }}>{label}</Text></Pressable>)}
       </View>
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pressable onPress={() => { setOpen(false); setKey(""); }} style={{ flex: 1, height: 38, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.subtext, fontWeight: "700" }}>取消</Text></Pressable>
+        <Pressable onPress={() => { setOpen(false); setKey(""); }} style={{ flex: 1, height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.subtext, fontWeight: "700" }}>取消</Text></Pressable>
         <Pressable
           disabled={!key.trim()}
           onPress={() => {
@@ -175,7 +175,7 @@ function AddField({ onAdd }: { onAdd: (key: string, value: unknown) => void }) {
             setOpen(false);
             setKey("");
           }}
-          style={{ flex: 1, height: 38, borderRadius: 8, backgroundColor: key.trim() ? colors.primary : colors.disabled, alignItems: "center", justifyContent: "center" }}
+          style={{ flex: 1, height: 40, borderRadius: 12, backgroundColor: key.trim() ? colors.primary : colors.disabled, alignItems: "center", justifyContent: "center" }}
         ><Text style={{ color: "#fff", fontWeight: "800" }}>添加</Text></Pressable>
       </View>
     </View>
@@ -193,14 +193,14 @@ function ArrayField({ name, value, onChange, depth }: { name: string; value: unk
             {isRecord(item) ? <RecordFields value={item} onChange={(next) => onChange(value.map((entry, i) => i === index ? next : entry))} depth={depth + 1} />
               : <PrimitiveField name={`第 ${index + 1} 项`} value={item} onChange={(next) => onChange(value.map((entry, i) => i === index ? next : entry))} />}
           </View>
-          <Pressable accessibilityLabel="删除列表项" onPress={() => onChange(value.filter((_, i) => i !== index))} style={{ width: 38, height: 38, marginTop: isRecord(item) ? 0 : 24, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.dangerBg }}>
+          <Pressable accessibilityLabel="删除列表项" onPress={() => onChange(value.filter((_, i) => i !== index))} style={{ width: 38, height: 38, marginTop: isRecord(item) ? 0 : 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.dangerBg }}>
             <Trash2 color={colors.danger} size={15} />
           </Pressable>
         </View>
       ))}
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Pressable onPress={() => onChange([...value, ""])} style={{ flex: 1, height: 38, borderRadius: 8, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }}><Plus color={colors.primary} size={14} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>文本项</Text></Pressable>
-        <Pressable onPress={() => onChange([...value, {}])} style={{ flex: 1, height: 38, borderRadius: 8, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }}><Plus color={colors.primary} size={14} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>对象项</Text></Pressable>
+        <Pressable onPress={() => onChange([...value, ""])} style={{ flex: 1, height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }}><Plus color={colors.primary} size={14} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>文本项</Text></Pressable>
+        <Pressable onPress={() => onChange([...value, {}])} style={{ flex: 1, height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }}><Plus color={colors.primary} size={14} /><Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>对象项</Text></Pressable>
       </View>
     </View>
   );
@@ -209,7 +209,7 @@ function ArrayField({ name, value, onChange, depth }: { name: string; value: unk
 function RecordFields({ value, onChange, depth = 0 }: { value: LuckyRecord; onChange: (value: LuckyRecord) => void; depth?: number }) {
   const colors = useAppTheme();
   return (
-    <View style={{ gap: 12, padding: depth ? 11 : 0, borderWidth: depth ? 1 : 0, borderColor: colors.border, borderRadius: 8 }}>
+    <View style={{ gap: 12, padding: depth ? 12 : 0, borderWidth: depth ? 1 : 0, borderColor: colors.border, borderRadius: 14 }}>
       {Object.entries(value).map(([key, item]) => (
         <View key={key} style={{ gap: 7 }}>
           {isRecord(item) ? <>
@@ -246,7 +246,7 @@ export function StructuredDataView({ value, depth = 0 }: { value: unknown; depth
   if (Array.isArray(value)) {
     if (!value.length) return <Text style={{ color: colors.subtext, fontSize: 12 }}>暂无项目</Text>;
     return <View style={{ gap: 8 }}>
-      {value.map((item, index) => <View key={index} style={{ gap: 5, padding: 9, borderRadius: 8, backgroundColor: colors.mutedCard }}>
+      {value.map((item, index) => <View key={index} style={{ gap: 5, padding: 10, borderRadius: 12, backgroundColor: colors.mutedCard }}>
         <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "700" }}>第 {index + 1} 项</Text>
         <StructuredDataView value={item} depth={depth + 1} />
       </View>)}
