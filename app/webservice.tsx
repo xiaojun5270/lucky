@@ -41,6 +41,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorState,
+  FullScreenSafeArea,
   IconTile,
   Page,
   Panel,
@@ -1041,8 +1042,8 @@ function WebServiceEditor({
   }
 
   return (
-    <Modal animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView
+    <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+      <FullScreenSafeArea
         style={{
           flex: 1,
           backgroundColor: colors.card,
@@ -1094,7 +1095,7 @@ function WebServiceEditor({
             </Pressable>
           </View>
         </View>
-      </SafeAreaView>
+      </FullScreenSafeArea>
     </Modal>
   );
 }

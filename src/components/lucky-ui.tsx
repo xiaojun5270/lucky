@@ -1,13 +1,19 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { ChevronRight, Inbox, RefreshCw, Search, TriangleAlert } from 'lucide-react-native';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/src/lib/theme';
 
 const CARD_RADIUS = 18;
 const CONTROL_RADIUS = 12;
+
+export function FullScreenSafeArea({ style, ...props }: ComponentProps<typeof View>) {
+  const insets = useSafeAreaInsets();
+  const modalInsets = { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left };
+  return <View {...props} style={[style, modalInsets]} />;
+}
 
 function surfaceShadow(platform: typeof Platform.OS) {
   return {

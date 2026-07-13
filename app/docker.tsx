@@ -37,6 +37,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   EmptyState,
   ErrorState,
+  FullScreenSafeArea,
   IconTile,
   MetricCard,
   Page,
@@ -385,8 +386,8 @@ function DockerFormEditor({
   const colors = useAppTheme();
   const [value, setValue] = useState(() => clone(editor.value));
   return (
-    <Modal animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
-      <SafeAreaView
+    <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+      <FullScreenSafeArea
         style={{
           flex: 1,
           backgroundColor: colors.card,
@@ -444,7 +445,7 @@ function DockerFormEditor({
             </Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </FullScreenSafeArea>
     </Modal>
   );
 }
