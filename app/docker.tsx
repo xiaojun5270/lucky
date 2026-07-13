@@ -385,33 +385,22 @@ function DockerFormEditor({
   const colors = useAppTheme();
   const [value, setValue] = useState(() => clone(editor.value));
   return (
-    <Modal transparent animationType="slide" presentationStyle="overFullScreen" onRequestClose={close}>
+    <Modal animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
       <SafeAreaView
         style={{
           flex: 1,
-          backgroundColor: "rgba(0,0,0,0.42)",
-          justifyContent: "flex-end",
-          paddingHorizontal: 12,
-          paddingBottom: 10,
+          backgroundColor: colors.card,
         }}
       >
-        <Pressable style={{ flex: 1 }} onPress={close} />
         <View
           style={{
+            flex: 1,
             width: "100%",
-            maxWidth: 720,
-            minHeight: "52%",
-            maxHeight: "76%",
-            alignSelf: "center",
             backgroundColor: colors.card,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: colors.border,
             padding: 18,
             gap: 13,
           }}
         >
-          <SheetHandle />
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <IconTile icon={Wrench} size={36} iconSize={18} />
             <Text

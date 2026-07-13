@@ -44,7 +44,6 @@ import {
   Page,
   Panel,
   SectionHeader,
-  SheetHandle,
 } from "@/src/components/lucky-ui";
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
 import { queryClient } from "@/src/lib/query-client";
@@ -465,33 +464,22 @@ function WebServiceEditor({
   }
 
   return (
-    <Modal animationType="slide" presentationStyle="overFullScreen" transparent onRequestClose={onClose}>
+    <Modal animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView
         style={{
           flex: 1,
-          backgroundColor: "rgba(0,0,0,0.42)",
-          justifyContent: "flex-end",
-          paddingHorizontal: 12,
-          paddingBottom: 10,
+          backgroundColor: colors.card,
         }}
       >
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
         <View
           style={{
+            flex: 1,
             width: "100%",
-            maxWidth: 720,
-            maxHeight: "76%",
-            minHeight: "52%",
-            alignSelf: "center",
             backgroundColor: colors.card,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: colors.border,
             padding: 18,
             gap: 13,
           }}
         >
-          <SheetHandle />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
             <IconTile icon={FileCog} size={36} iconSize={18} />
             <Text
