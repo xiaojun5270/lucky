@@ -51,7 +51,7 @@ jobs:
         run: |
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=512m/' android/gradle.properties
           sed -i 's/^org.gradle.parallel=.*/org.gradle.parallel=false/' android/gradle.properties
-          echo 'org.gradle.workers.max=2' >> android/gradle.properties
+          printf '\norg.gradle.workers.max=2\n' >> android/gradle.properties
 
       - name: Build release APK
         working-directory: android
