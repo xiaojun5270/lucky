@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -21,8 +22,9 @@ import {
   Trash2,
   Workflow,
   Wrench,
+  X,
 } from "lucide-react-native";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Alert,
   Modal,
@@ -57,7 +59,9 @@ import {
   deleteWebServiceRule,
   getLightPanelConfigTemplate,
   getWebServiceCgiList,
+  getWebServiceCorazaInstances,
   getWebServiceGroups,
+  getWebServiceGroupOptions,
   getWebServiceLastLogs,
   getWebServiceRule,
   getWebServiceRuleLastLogs,
@@ -95,6 +99,7 @@ type EditorState = {
   key?: string;
   parentKey?: string;
 };
+type SelectOption = { label: string; value: string };
 type Action =
   | { type: "save"; editor: EditorState; value: LuckyRecord }
   | { type: "delete-rule" | "delete-group" | "delete-cgi"; key: string }
@@ -199,23 +204,48 @@ function IconButton({
 function WebServiceEditor({
   editor,
   busy,
+  groupOptions,
+  wafOptions,
   onClose,
   onSave,
 }: {
   editor: EditorState;
   busy: boolean;
+  groupOptions: SelectOption[];
+  wafOptions: SelectOption[];
   onClose: () => void;
   onSave: (value: LuckyRecord) => void;
 }) {
   const colors = useAppTheme();
-  const [value, setValue] = useState(() => clone(editor.value));
+  const [value, setValue] = useState(() => clone(editor.type === "subrule" ? { ...newWebServiceSubRule(), ...editor.value } : editor.value));
+  const [openSelect, setOpenSelect] = useState("");
+  const [formError, setFormError] = useState("");
 
   function update(key: string, next: unknown) {
     setValue((current) => ({ ...current, [key]: next }));
   }
 
   function save() {
-    onSave(value);
+    let nextValue = value;
+    if (editor.type === "subrule") {
+      const domains = Array.isArray(value.Domains) ? value.Domains.map(String).filter((item) => item.trim()) : [];
+      const locations = Array.isArray(value.Locations) ? value.Locations.map(String).filter((item) => item.trim()) : [];
+      if (!domains.length) {
+        setFormError("请至少填写一个前端地址");
+        return;
+      }
+      if (value.WebServiceType === "reverseproxy" && !locations.length) {
+        setFormError("反向代理必须填写后端地址");
+        return;
+      }
+      if (value.EnableBasicAuth && !String(value.BasicAuthUser ?? "").trim()) {
+        setFormError("启用 Basic 认证后必须填写用户名");
+        return;
+      }
+      nextValue = { ...value, Domains: domains, Locations: locations };
+    }
+    setFormError("");
+    onSave(nextValue);
   }
 
   function Field({
@@ -294,18 +324,19 @@ function WebServiceEditor({
   }: {
     label: string;
     field: string;
-    options: string[];
+    options: Array<string | SelectOption>;
   }) {
     return (
       <View style={{ gap: 7 }}>
         <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{label}</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-          {options.map((option) => {
-            const selected = String(value[field] ?? "") === option;
+          {options.map((item) => {
+            const option = typeof item === "string" ? { label: item, value: item } : item;
+            const selected = String(value[field] ?? "") === option.value;
             return (
               <Pressable
-                key={option}
-                onPress={() => update(field, option)}
+                key={option.value}
+                onPress={() => update(field, option.value)}
                 style={{
                   minWidth: 76,
                   height: 38,
@@ -319,7 +350,7 @@ function WebServiceEditor({
                 }}
               >
                 <Text style={{ color: selected ? colors.primary : colors.text, fontWeight: "700", fontSize: 12 }}>
-                  {option}
+                  {option.label}
                 </Text>
               </Pressable>
             );
@@ -329,56 +360,103 @@ function WebServiceEditor({
     );
   }
 
+  function SelectField({ label, field, options }: { label: string; field: string; options: SelectOption[] }) {
+    const current = String(value[field] ?? "");
+    const selected = options.find((option) => option.value === current);
+    const open = openSelect === field;
+    return <View style={{ gap: 7 }}>
+      <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{label}</Text>
+      <Pressable onPress={() => setOpenSelect(open ? "" : field)} style={{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: open ? colors.primary : colors.border, backgroundColor: colors.card, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Text numberOfLines={1} style={{ flex: 1, color: selected ? colors.text : colors.placeholder, fontSize: 13 }}>{selected?.label ?? "请选择"}</Text>
+        <ChevronDown color={open ? colors.primary : colors.subtext} size={17} />
+      </Pressable>
+      {open ? <View style={{ borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: "hidden" }}>
+        {options.map((option, index) => {
+          const active = option.value === current;
+          return <Pressable key={option.value || "empty"} onPress={() => { update(field, option.value); setOpenSelect(""); }} style={{ minHeight: 42, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 9, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, backgroundColor: active ? colors.primarySoft : colors.card }}>
+            <Text style={{ flex: 1, color: active ? colors.primary : colors.text, fontSize: 13, fontWeight: active ? "700" : "500" }}>{option.label}</Text>
+            {active ? <Check color={colors.primary} size={16} /> : null}
+          </Pressable>;
+        })}
+      </View> : null}
+    </View>;
+  }
+
+  function FormSection({ title, children }: { title: string; children: ReactNode }) {
+    return <View style={{ gap: 10, padding: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
+      <Text style={{ color: colors.text, fontSize: 14, fontWeight: "800" }}>{title}</Text>
+      {children}
+    </View>;
+  }
+
   function form() {
     if (editor.type === "rule") return (
       <>
-        <Field label="规则名称" field="RuleName" />
-        <Toggle label="启用规则" field="Enable" />
-        <Choices label="网络协议" field="Network" options={["tcp", "tcp4", "tcp6"]} />
-        <Field label="监听 IP" field="ListenIP" hint="留空表示监听所有地址" />
-        <Field label="监听端口" field="ListenPort" numeric />
-        <Choices label="编辑模式" field="DiaglogShowMode" options={["simple", "full"]} />
-        <Toggle label="自动配置防火墙" field="AutoOptionsFirewall" />
-        <Toggle label="启用 TLS" field="EnableTLS" />
+        {Field({ label: "规则名称", field: "RuleName" })}
+        {Toggle({ label: "启用规则", field: "Enable" })}
+        {Choices({ label: "网络协议", field: "Network", options: ["tcp", "tcp4", "tcp6"] })}
+        {Field({ label: "监听 IP", field: "ListenIP", hint: "留空表示监听所有地址" })}
+        {Field({ label: "监听端口", field: "ListenPort", numeric: true })}
+        {Choices({ label: "编辑模式", field: "DiaglogShowMode", options: ["simple", "full"] })}
+        {Toggle({ label: "自动配置防火墙", field: "AutoOptionsFirewall" })}
+        {Toggle({ label: "启用 TLS", field: "EnableTLS" })}
         {Boolean(value.EnableTLS) ? <>
-          <Field label="TLS 最低版本" field="TLSMinVersion" numeric />
-          <Toggle label="启用 HTTP/3" field="Http3" />
+          {Field({ label: "TLS 最低版本", field: "TLSMinVersion", numeric: true })}
+          {Toggle({ label: "启用 HTTP/3", field: "Http3" })}
         </> : null}
-        <Field label="最大请求头 (KB)" field="MaxHeaderKBytes" numeric />
+        {Field({ label: "最大请求头 (KB)", field: "MaxHeaderKBytes", numeric: true })}
       </>
     );
     if (editor.type === "subrule") return (
       <>
-        <Field label="备注" field="Remark" />
-        <Toggle label="启用子规则" field="Enable" />
-        <Field label="分组 Key" field="GroupKey" />
-        <Field label="服务类型" field="WebServiceType" hint="例如 reverseproxy、fileserver" />
-        <Field label="域名" field="Domains" multiline hint="每行填写一个域名" />
-        <Field label="目标地址或目录" field="Locations" multiline hint="每行填写一个地址" />
-        <Toggle label="启用访问日志" field="EnableAccessLog" />
-        <Toggle label="忽略上游 TLS 证书错误" field="LocationInsecureSkipVerify" />
-        <Toggle label="EasyLucky 模式" field="EasyLucky" />
+        {FormSection({ title: "基础设置", children: <>
+          {Field({ label: "子规则名称", field: "Remark", hint: "可留空" })}
+          {Toggle({ label: "子规则开关", field: "Enable" })}
+          {Choices({ label: "操作模式", field: "DiaglogShowMode", options: [{ label: "简易模式", value: "simple" }, { label: "定制模式", value: "full" }] })}
+          {SelectField({ label: "分组", field: "GroupKey", options: groupOptions })}
+          {SelectField({ label: "服务类型", field: "WebServiceType", options: [
+            { label: "反向代理", value: "reverseproxy" },
+            { label: "文件服务", value: "fileserver" },
+            { label: "重定向", value: "redirect" },
+          ] })}
+          {Field({ label: "前端地址", field: "Domains", multiline: true, hint: "每行填写一个域名或访问地址" })}
+          {Field({ label: "后端地址", field: "Locations", multiline: true, hint: "每行填写一个地址，多行表示负载均衡" })}
+          {SelectField({ label: "CorazaWAF", field: "CorazaWAFKey", options: wafOptions })}
+          {Toggle({ label: "万事大吉", field: "EasyLucky" })}
+          {Toggle({ label: "忽略后端 TLS 证书验证", field: "LocationInsecureSkipVerify" })}
+          {Toggle({ label: "使用目标地址 Host 请求头", field: "UseTargetHost" })}
+          {Toggle({ label: "自动反代重定向", field: "AutoRedirect" })}
+          {Toggle({ label: "记录访问日志", field: "EnableAccessLog" })}
+        </> })}
+        {FormSection({ title: "安全设置", children: <>
+          {Toggle({ label: "Basic 认证", field: "EnableBasicAuth" })}
+          {Boolean(value.EnableBasicAuth) ? <>
+            {Field({ label: "Basic 用户名", field: "BasicAuthUser" })}
+            {Field({ label: "Basic 密码", field: "BasicAuthPasswd" })}
+          </> : null}
+          {Toggle({ label: "网页认证", field: "EnableWebAuth" })}
+        </> })}
       </>
     );
     if (editor.type === "group") return (
       <>
-        <Field label="分组名称" field="Name" />
-        {editor.key ? <Field label="分组 Key" field="Key" readOnly /> : null}
+        {Field({ label: "分组名称", field: "Name" })}
+        {editor.key ? Field({ label: "分组 Key", field: "Key", readOnly: true }) : null}
       </>
     );
     if (editor.type === "cgi") return (
       <>
-        <Field label="实例名称" field="Name" />
-        <Toggle label="启用 CGI" field="Enable" />
-        <Choices label="CGI 类型" field="CGIType" options={["php", "fastcgi"]} />
-        <Choices label="网络协议" field="Network" options={["tcp", "tcp4", "tcp6", "unix"]} />
-        <Field label="服务地址" field="Address" hint="例如 127.0.0.1:9000" />
-        <Field label="最大连接数" field="MaxConns" numeric />
-        <Field label="连接超时（秒）" field="ConnectTimeout" numeric />
-        <Field label="默认文档根目录" field="DefaultDocRoot" />
-        <Field label="默认首页" field="DefaultIndexNames" multiline hint="每行一个文件名" />
-        <Field label="文件扩展名" field="FileExtensions" />
-        <Field label="禁止访问路径" field="ForbiddenPaths" multiline />
+        {Field({ label: "实例名称", field: "Name" })}
+        {Toggle({ label: "启用 CGI", field: "Enable" })}
+        {Choices({ label: "CGI 类型", field: "CGIType", options: ["php", "fastcgi"] })}
+        {Choices({ label: "网络协议", field: "Network", options: ["tcp", "tcp4", "tcp6", "unix"] })}
+        {Field({ label: "服务地址", field: "Address", hint: "例如 127.0.0.1:9000" })}
+        {Field({ label: "最大连接数", field: "MaxConns", numeric: true })}
+        {Field({ label: "连接超时（秒）", field: "ConnectTimeout", numeric: true })}
+        {Field({ label: "默认文档根目录", field: "DefaultDocRoot" })}
+        {Field({ label: "默认首页", field: "DefaultIndexNames", multiline: true, hint: "每行一个文件名" })}
+        {Field({ label: "文件扩展名", field: "FileExtensions" })}
+        {Field({ label: "禁止访问路径", field: "ForbiddenPaths", multiline: true })}
       </>
     );
     return <StructuredForm value={value} onChange={setValue} />;
@@ -416,10 +494,8 @@ function WebServiceEditor({
             >
               {editor.title}
             </Text>
-            <Pressable onPress={onClose}>
-              <Text style={{ color: colors.subtext, fontWeight: "700" }}>
-                取消
-              </Text>
+            <Pressable accessibilityLabel="关闭" onPress={onClose} style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+              <X color={colors.subtext} size={18} />
             </Pressable>
           </View>
           <ScrollView
@@ -428,25 +504,19 @@ function WebServiceEditor({
             style={{ flex: 1 }}
           >
             {form()}
+            {formError ? <ErrorState message={formError} /> : null}
           </ScrollView>
-          <Pressable
-            disabled={busy}
-            onPress={save}
-            style={{
-              minHeight: 48,
-              borderRadius: 8,
-              backgroundColor: busy ? colors.disabled : colors.primary,
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "row",
-              gap: 8,
-            }}
-          >
-            <Save color="#fff" size={17} />
-            <Text style={{ color: "#fff", fontWeight: "800" }}>
-              {busy ? "保存中" : "保存配置"}
-            </Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable disabled={busy} onPress={onClose} style={{ flex: 1, minHeight: 48, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: colors.subtext, fontWeight: "700" }}>取消</Text>
+            </Pressable>
+            <Pressable disabled={busy} onPress={save} style={{ flex: 1.4, minHeight: 48, borderRadius: 8, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }}>
+              <Save color="#fff" size={17} />
+              <Text style={{ color: "#fff", fontWeight: "800" }}>
+                {busy ? "保存中" : editor.type === "subrule" ? (editor.key ? "保存子规则" : "添加子规则") : "保存配置"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </SafeAreaView>
     </Modal>
@@ -472,6 +542,16 @@ export default function WebServiceScreen() {
     queryKey: ["webservice", "groups"],
     queryFn: getWebServiceGroups,
     enabled: view === "groups",
+  });
+  const subRuleGroups = useQuery({
+    queryKey: ["webservice", "subrule-group-options"],
+    queryFn: getWebServiceGroupOptions,
+    enabled: editor?.type === "subrule",
+  });
+  const wafInstances = useQuery({
+    queryKey: ["webservice", "coraza-instances"],
+    queryFn: getWebServiceCorazaInstances,
+    enabled: editor?.type === "subrule",
   });
   const cgi = useQuery({
     queryKey: ["webservice", "cgi"],
@@ -1488,6 +1568,20 @@ export default function WebServiceScreen() {
           key={`${editor.type}-${editor.key ?? "new"}`}
           editor={editor}
           busy={mutation.isPending}
+          groupOptions={[
+            { label: "未分组", value: "" },
+            ...(subRuleGroups.data ?? []).map((item, index) => ({
+              label: pick(item, ["Name", "GroupName", "Remark"], `分组 ${index + 1}`),
+              value: keyOf(item, index),
+            })),
+          ]}
+          wafOptions={[
+            { label: "不启用", value: "" },
+            ...(wafInstances.data ?? []).map((item, index) => ({
+              label: pick(item, ["Name", "Remark"], `WAF ${index + 1}`),
+              value: keyOf(item, index),
+            })),
+          ]}
           onClose={() => setEditor(undefined)}
           onSave={(value) => mutation.mutate({ type: "save", editor, value })}
         />

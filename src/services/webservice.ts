@@ -73,11 +73,15 @@ export const newWebServiceSubRule = (): LuckyRecord => ({
   Enable: true,
   Key: "",
   Remark: "",
+  DiaglogShowMode: "simple",
   GroupKey: "",
   WebServiceType: "reverseproxy",
   Domains: [""],
   Locations: [""],
+  CorazaWAFKey: "",
   LocationInsecureSkipVerify: true,
+  UseTargetHost: false,
+  AutoRedirect: false,
   EnableAccessLog: false,
   LogLevel: 4,
   AccessLogMaxNum: 256,
@@ -86,8 +90,17 @@ export const newWebServiceSubRule = (): LuckyRecord => ({
     "[#{clientIP}][#{remoteIP}]#{tab}[#{method}][#{host}#{url}]",
   RemoteIPHeaders: ["X-Forwarded-For", "X-Real-IP"],
   EasyLucky: true,
+  EnableBasicAuth: false,
+  BasicAuthUser: "",
+  BasicAuthPasswd: "",
+  EnableWebAuth: false,
   OtherParams: {},
 });
+
+export async function getWebServiceCorazaInstances() {
+  const payload = await luckyFetch("/api/coraza/instancelist");
+  return list(payload, ["list", "instanceList", "instances"]);
+}
 
 export const newWebServiceGroup = (): LuckyRecord => ({ Key: "", Name: "" });
 
@@ -180,6 +193,11 @@ export async function getWebServiceGroups() {
     }),
   );
   return { items: enriched, raw: payload };
+}
+
+export async function getWebServiceGroupOptions() {
+  const payload = await luckyFetch("/api/webservice/groups");
+  return list(payload, ["list", "groups", "groupList"]);
 }
 
 export function createWebServiceGroup(value: LuckyRecord) {

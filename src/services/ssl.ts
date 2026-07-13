@@ -66,6 +66,28 @@ export async function syncSslCertificate(key: string) {
 export const reorderSslCertificates = (keys: unknown) =>
   luckyFetch("/api/ssl/sslorderadjustment", { method: "PUT", body: JSON.stringify(keys) });
 export const getSslSyncClients = () => luckyFetch("/api/ssl/syncclients");
+export async function getSslSyncClientOptions() {
+  const payload = await getSslSyncClients();
+  const queue: unknown[] = [payload];
+  const visited = new Set<object>();
+  let best: LuckyListItem[] = [];
+  let bestScore = 0;
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+    if (Array.isArray(current)) {
+      const records = current.filter(isRecord) as LuckyListItem[];
+      const score = records.reduce((total, item) => total + ["Key", "ClientKey", "Name", "ClientName", "DeviceName"].filter((key) => item[key] !== undefined).length, 0);
+      if (records.length && score > bestScore) {
+        best = records;
+        bestScore = score;
+      }
+      queue.push(...current);
+    } else queue.push(...Object.values(current as LuckyRecord));
+  }
+  return best;
+}
 export const getSslSetting = () => luckyFetch("/api/ssl/setting");
 export const updateSslSetting = (value: LuckyRecord) =>
   luckyFetch("/api/ssl/setting", { method: "PUT", body: JSON.stringify(value) });

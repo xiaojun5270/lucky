@@ -14,6 +14,7 @@ jobs:
       contents: read
     env:
       EXPO_NO_TELEMETRY: 1
+      NODE_ENV: production
 
     steps:
       - name: Checkout
@@ -45,6 +46,12 @@ jobs:
 
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
+
+      - name: Configure Gradle memory
+        run: |
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1024m -XX:ReservedCodeCacheSize=512m/' android/gradle.properties
+          sed -i 's/^org.gradle.parallel=.*/org.gradle.parallel=false/' android/gradle.properties
+          echo 'org.gradle.workers.max=2' >> android/gradle.properties
 
       - name: Build release APK
         working-directory: android
