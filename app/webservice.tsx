@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -174,6 +175,67 @@ function cleanLines(value: unknown) {
   return lines.map((item) => item.trim()).filter(Boolean);
 }
 
+function buildSubRuleUrl(rule: LuckyRecord, subRule: LuckyRecord) {
+  const domain = cleanLines(subRule.Domains)[0];
+  if (!domain) return "";
+
+  const scheme = rule.EnableTLS ? "https" : "http";
+  const schemeMatch = domain.match(/^([a-z][a-z\d+.-]*):\/\//i);
+  if (schemeMatch && !/^https?$/i.test(schemeMatch[1])) {
+    throw new Error("前端地址格式不正确");
+  }
+  const address = schemeMatch
+    ? domain.slice(schemeMatch[0].length)
+    : domain.startsWith("//")
+      ? domain.slice(2)
+      : domain;
+  if (!address || /^[/?#]/.test(address)) {
+    throw new Error("前端地址格式不正确");
+  }
+  const candidate = `${scheme}://${address}`;
+  const parsed = new URL(candidate);
+  if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) {
+    throw new Error("前端地址格式不正确");
+  }
+
+  const authorityStart = candidate.indexOf("//") + 2;
+  const authorityEndMatch = candidate.slice(authorityStart).search(/[/?#]/);
+  const authorityEnd =
+    authorityEndMatch < 0
+      ? candidate.length
+      : authorityStart + authorityEndMatch;
+  const authority = candidate.slice(authorityStart, authorityEnd);
+  const host = authority.slice(authority.lastIndexOf("@") + 1);
+  const explicitPortMatch = host.startsWith("[")
+    ? host.slice(host.indexOf("]") + 1).match(/^:(\d+)$/)
+    : host.match(/:(\d+)$/);
+  const explicitPort = explicitPortMatch?.[1];
+  const listenPort = Number(rule.ListenPort);
+  const defaultPort = parsed.protocol === "https:" ? 443 : 80;
+
+  if (
+    !explicitPort &&
+    Number.isInteger(listenPort) &&
+    listenPort > 0 &&
+    listenPort <= 65535 &&
+    listenPort !== defaultPort
+  ) {
+    parsed.port = String(listenPort);
+  }
+  const url = parsed.toString();
+  if (!explicitPort || parsed.port) return url;
+
+  const normalizedAuthorityStart = url.indexOf("//") + 2;
+  const normalizedAuthorityEndMatch = url
+    .slice(normalizedAuthorityStart)
+    .search(/[/?#]/);
+  const normalizedAuthorityEnd =
+    normalizedAuthorityEndMatch < 0
+      ? url.length
+      : normalizedAuthorityStart + normalizedAuthorityEndMatch;
+  return `${url.slice(0, normalizedAuthorityEnd)}:${explicitPort}${url.slice(normalizedAuthorityEnd)}`;
+}
+
 let webRuleDraftSequence = 0;
 
 function nextWebRuleDraftId() {
@@ -258,12 +320,14 @@ function IconButton({
   color,
   onPress,
   disabled,
+  visibleLabel,
 }: {
   icon: typeof Pencil;
   label: string;
   color: string;
   onPress: () => void;
   disabled?: boolean;
+  visibleLabel: string;
 }) {
   const colors = useAppTheme();
   return (
@@ -272,16 +336,22 @@ function IconButton({
       disabled={disabled}
       onPress={onPress}
       style={{
-        width: 36,
+        minWidth: 58,
         height: 36,
+        paddingHorizontal: 8,
         borderRadius: 8,
+        flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
+        gap: 4,
         backgroundColor: colors.mutedCard,
         opacity: disabled ? 0.4 : 1,
       }}
     >
       <Icon color={color} size={16} />
+      <Text numberOfLines={1} style={{ color, fontSize: 11, fontWeight: "700" }}>
+        {visibleLabel}
+      </Text>
     </Pressable>
   );
 }
@@ -979,7 +1049,7 @@ function WebServiceEditor({
             const domain = cleanLines(proxy.Domains)[0] ?? "未填写前端地址";
             const write = (field: string, next: unknown) => updateProxy(index, field, next);
             return <View key={draftId} style={{ borderRadius: 14, borderWidth: 1, borderColor: open ? colors.primary : colors.border, backgroundColor: colors.card, padding: 12, gap: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ gap: 8 }}>
                 <Pressable onPress={() => setExpandedProxyId(open ? "" : draftId)} style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 9 }}>
                   <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" }}>
                     <Network color={colors.primary} size={17} />
@@ -990,8 +1060,10 @@ function WebServiceEditor({
                   </View>
                   {open ? <ChevronUp color={colors.subtext} size={17} /> : <ChevronDown color={colors.subtext} size={17} />}
                 </Pressable>
-                <IconButton icon={Pencil} label={`编辑${title}`} color={colors.primary} onPress={() => setExpandedProxyId(draftId)} />
-                <IconButton icon={Trash2} label={`移除${title}`} color={colors.danger} onPress={() => removeProxy(index, draftId)} />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 7 }}>
+                  <IconButton icon={Pencil} label={`编辑${title}`} visibleLabel="编辑" color={colors.primary} onPress={() => setExpandedProxyId(draftId)} />
+                  <IconButton icon={Trash2} label={`移除${title}`} visibleLabel="移除" color={colors.danger} onPress={() => removeProxy(index, draftId)} />
+                </View>
               </View>
               {open ? <View style={{ gap: 10, borderTopWidth: 1, borderTopColor: colors.rowBorder, paddingTop: 12 }}>
                 {SubRuleFields({ data: proxy, onUpdate: write, scope: draftId, ruleMode: String(value.DiaglogShowMode ?? "simple"), tlsEnabled: Boolean(value.EnableTLS) })}
@@ -1256,7 +1328,6 @@ export default function WebServiceScreen() {
   async function editSubRule(
     parentKey: string,
     key?: string,
-    copySubRule = false,
   ) {
     try {
       const rule = await getWebServiceRule(parentKey);
@@ -1265,12 +1336,11 @@ export default function WebServiceScreen() {
         : newWebServiceSubRule();
       if (!value) throw new Error("子规则不存在");
       const draft = clone(value);
-      if (copySubRule) draft.Key = "";
       setEditor({
         type: "subrule",
-        title: copySubRule ? "复制子规则" : key ? "编辑子规则" : "添加子规则",
+        title: key ? "编辑子规则" : "添加子规则",
         value: draft,
-        key: copySubRule ? undefined : key,
+        key,
         parentKey,
         ruleMode:
           rule.DiaglogShowMode === "full"
@@ -1280,6 +1350,30 @@ export default function WebServiceScreen() {
       });
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "读取子规则失败");
+    }
+  }
+
+  async function copySubRuleUrl(rule: LuckyRecord, subRule: LuckyRecord) {
+    let url: string;
+    try {
+      url = buildSubRuleUrl(rule, subRule);
+    } catch {
+      Alert.alert("无法复制", "该子规则的前端地址格式不正确");
+      return;
+    }
+    if (!url) {
+      Alert.alert("无法复制", "该子规则没有前端地址");
+      return;
+    }
+    try {
+      const copied = await Clipboard.setStringAsync(url);
+      if (!copied) {
+        Alert.alert("复制失败", "无法写入系统剪贴板，请检查权限后重试");
+        return;
+      }
+      Alert.alert("网址已复制", url);
+    } catch {
+      Alert.alert("复制失败", "无法写入系统剪贴板，请重试");
     }
   }
 
@@ -1536,71 +1630,80 @@ export default function WebServiceScreen() {
                       <ChevronDown color={colors.subtext} size={18} />
                     )}
                   </Pressable>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 7,
-                    }}
-                  >
-                    <Switch
-                      value={enabled(item)}
-                      disabled={mutation.isPending}
-                      onValueChange={(value) =>
-                        mutation.mutate({
-                          type: "toggle-rule",
-                          key,
-                          enabled: value,
-                        })
-                      }
-                      trackColor={{
-                        false: colors.disabled,
-                        true: colors.primary,
-                      }}
-                    />
-                    <View style={{ flex: 1 }} />
-                    <IconButton
-                      icon={ArrowUp}
-                      label="上移"
-                      color={colors.text}
-                      disabled={index === 0}
-                      onPress={() =>
-                        mutation.mutate({
-                          type: "reorder-rules",
-                          keys: move(ruleKeys, index, -1),
-                        })
-                      }
-                    />
-                    <IconButton
-                      icon={ArrowDown}
-                      label="下移"
-                      color={colors.text}
-                      disabled={index === ruleKeys.length - 1}
-                      onPress={() =>
-                        mutation.mutate({
-                          type: "reorder-rules",
-                          keys: move(ruleKeys, index, 1),
-                        })
-                      }
-                    />
-                    <IconButton
-                      icon={Copy}
-                      label="复制"
-                      color={colors.primary}
-                      onPress={() => editRule(key, true)}
-                    />
-                    <IconButton
-                      icon={Pencil}
-                      label="编辑"
-                      color={colors.primary}
-                      onPress={() => editRule(key)}
-                    />
-                    <IconButton
-                      icon={Trash2}
-                      label="删除"
-                      color={colors.danger}
-                      onPress={() => confirmDelete("rule", key, name)}
-                    />
+                  <View style={{ gap: 8 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Switch
+                        value={enabled(item)}
+                        disabled={mutation.isPending}
+                        onValueChange={(value) =>
+                          mutation.mutate({
+                            type: "toggle-rule",
+                            key,
+                            enabled: value,
+                          })
+                        }
+                        trackColor={{
+                          false: colors.disabled,
+                          true: colors.primary,
+                        }}
+                      />
+                      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "700" }}>
+                        {enabled(item) ? "规则已启用" : "规则已停用"}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 7 }}>
+                      <View style={{ flexDirection: "row", gap: 7 }}>
+                        <IconButton
+                          icon={ArrowUp}
+                          label="上移"
+                          visibleLabel="上移"
+                          color={colors.text}
+                          disabled={index === 0}
+                          onPress={() =>
+                            mutation.mutate({
+                              type: "reorder-rules",
+                              keys: move(ruleKeys, index, -1),
+                            })
+                          }
+                        />
+                        <IconButton
+                          icon={ArrowDown}
+                          label="下移"
+                          visibleLabel="下移"
+                          color={colors.text}
+                          disabled={index === ruleKeys.length - 1}
+                          onPress={() =>
+                            mutation.mutate({
+                              type: "reorder-rules",
+                              keys: move(ruleKeys, index, 1),
+                            })
+                          }
+                        />
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 7 }}>
+                        <IconButton
+                          icon={Copy}
+                          label="复制规则"
+                          visibleLabel="复制规则"
+                          color={colors.primary}
+                          onPress={() => editRule(key, true)}
+                        />
+                        <IconButton
+                          icon={Pencil}
+                          label="编辑"
+                          visibleLabel="编辑"
+                          color={colors.primary}
+                          onPress={() => editRule(key)}
+                        />
+                        <IconButton
+                          icon={Trash2}
+                          label="删除"
+                          visibleLabel="删除"
+                          color={colors.danger}
+                          onPress={() => confirmDelete("rule", key, name)}
+                        />
+                      </View>
+                    </View>
                   </View>
                   {open ? (
                     <View
@@ -1708,54 +1811,57 @@ export default function WebServiceScreen() {
                                   }
                                 />
                               </View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  justifyContent: "flex-end",
-                                  gap: 7,
-                                }}
-                              >
-                                <IconButton
-                                  icon={ScrollText}
-                                  label="子规则日志"
-                                  color={colors.cyan}
-                                  onPress={() => showSubRuleLogs(key, subKey)}
-                                />
-                                {pick(sub, ["WebServiceType"]).toLowerCase().includes("file") ? (
+                              <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 7 }}>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
                                   <IconButton
-                                    icon={FolderUp}
-                                    label="更新文件目录"
-                                    color={colors.warning}
-                                    onPress={() => {
-                                      setMountIndex("0");
-                                      setFolderTarget({ parentKey: key, subKey });
-                                    }}
+                                    icon={ScrollText}
+                                    label="子规则日志"
+                                    visibleLabel="日志"
+                                    color={colors.cyan}
+                                    onPress={() => showSubRuleLogs(key, subKey)}
                                   />
-                                ) : null}
-                                <IconButton
-                                  icon={Copy}
-                                  label="复制子规则"
-                                  color={colors.primary}
-                                  onPress={() => editSubRule(key, subKey, true)}
-                                />
-                                <IconButton
-                                  icon={Pencil}
-                                  label="编辑子规则"
-                                  color={colors.primary}
-                                  onPress={() => editSubRule(key, subKey)}
-                                />
-                                <IconButton
-                                  icon={Trash2}
-                                  label="删除子规则"
-                                  color={colors.danger}
-                                  onPress={() =>
-                                    confirmDeleteSubRule(
-                                      key,
-                                      subKey,
-                                      pick(sub, ["Remark"], domains),
-                                    )
-                                  }
-                                />
+                                  {pick(sub, ["WebServiceType"]).toLowerCase().includes("file") ? (
+                                    <IconButton
+                                      icon={FolderUp}
+                                      label="更新文件目录"
+                                      visibleLabel="目录"
+                                      color={colors.warning}
+                                      onPress={() => {
+                                        setMountIndex("0");
+                                        setFolderTarget({ parentKey: key, subKey });
+                                      }}
+                                    />
+                                  ) : null}
+                                  <IconButton
+                                    icon={Copy}
+                                    label="复制完整网址"
+                                    visibleLabel="复制网址"
+                                    color={colors.primary}
+                                    onPress={() => copySubRuleUrl(item, sub)}
+                                  />
+                                </View>
+                                <View style={{ flexDirection: "row", gap: 7 }}>
+                                  <IconButton
+                                    icon={Pencil}
+                                    label="编辑子规则"
+                                    visibleLabel="编辑"
+                                    color={colors.primary}
+                                    onPress={() => editSubRule(key, subKey)}
+                                  />
+                                  <IconButton
+                                    icon={Trash2}
+                                    label="删除子规则"
+                                    visibleLabel="删除"
+                                    color={colors.danger}
+                                    onPress={() =>
+                                      confirmDeleteSubRule(
+                                        key,
+                                        subKey,
+                                        pick(sub, ["Remark"], domains),
+                                      )
+                                    }
+                                  />
+                                </View>
                               </View>
                             </View>
                           );
@@ -1833,9 +1939,12 @@ export default function WebServiceScreen() {
                         {key} · {String(item.subRuleCount ?? 0)} 个子规则
                       </Text>
                     </View>
+                  </View>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 7 }}>
                     <IconButton
                       icon={ArrowUp}
                       label="上移"
+                      visibleLabel="上移"
                       color={colors.text}
                       disabled={index === 0}
                       onPress={() =>
@@ -1848,6 +1957,7 @@ export default function WebServiceScreen() {
                     <IconButton
                       icon={ArrowDown}
                       label="下移"
+                      visibleLabel="下移"
                       color={colors.text}
                       disabled={index === groupKeys.length - 1}
                       onPress={() =>
@@ -1860,6 +1970,7 @@ export default function WebServiceScreen() {
                     <IconButton
                       icon={Pencil}
                       label="编辑"
+                      visibleLabel="编辑"
                       color={colors.primary}
                       onPress={() =>
                         setEditor({
@@ -1873,6 +1984,7 @@ export default function WebServiceScreen() {
                     <IconButton
                       icon={Trash2}
                       label="删除"
+                      visibleLabel="删除"
                       color={colors.danger}
                       onPress={() => confirmDelete("group", key, name)}
                     />
@@ -1953,9 +2065,12 @@ export default function WebServiceScreen() {
                         })
                       }
                     />
+                  </View>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 7 }}>
                     <IconButton
                       icon={Pencil}
                       label="编辑"
+                      visibleLabel="编辑"
                       color={colors.primary}
                       onPress={() =>
                         setEditor({
@@ -1969,6 +2084,7 @@ export default function WebServiceScreen() {
                     <IconButton
                       icon={Trash2}
                       label="删除"
+                      visibleLabel="删除"
                       color={colors.danger}
                       onPress={() => confirmDelete("cgi", key, name)}
                     />
