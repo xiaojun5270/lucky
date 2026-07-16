@@ -789,8 +789,14 @@ function DockerGauge({ label, value, color, digits = 1 }: { label: string; value
         transform={`rotate(135 ${size / 2} ${size / 2})`}
       /> : null}
     </Svg>
-    <View pointerEvents="none" style={{ position: "absolute", alignItems: "center" }}>
-      <Text adjustsFontSizeToFit numberOfLines={1} style={{ maxWidth: 70, color: colors.text, fontSize: 18, fontWeight: "800" }}>
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Text
+        adjustsFontSizeToFit
+        allowFontScaling={false}
+        minimumFontScale={0.65}
+        numberOfLines={1}
+        style={{ width: 60, color: colors.text, fontSize: 14, lineHeight: 18, fontWeight: "800", textAlign: "center", includeFontPadding: false }}
+      >
         {formatPercent(value, digits)}
       </Text>
     </View>
@@ -1756,14 +1762,14 @@ export default function DockerScreen() {
               const stats = containerStatsByKey.get(key) ?? containerStatsByKey.get(displayName);
               return (
                 <View key={key} style={{ borderRadius: 8, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.card, padding: 14, gap: 12, shadowColor: colors.shadow, shadowOpacity: 0.08, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
-                  <Pressable onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ minHeight: 72, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, opacity: pressed ? 0.62 : 1 })}>
-                    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 140, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={52} />
-                      <View style={{ width: 4, height: 42, borderRadius: 2, backgroundColor: running ? colors.success : colors.disabled }} />
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text numberOfLines={1} style={{ color: colors.primary, fontSize: 16, fontWeight: "800" }}>{displayName}</Text>
-                        <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10, marginTop: 4 }}>{containerStatus(item, running, paused)}</Text>
+                  <Pressable onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ minHeight: 86, flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 10, opacity: pressed ? 0.62 : 1 })}>
+                    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 132, minWidth: 132, alignItems: "flex-start", gap: 5 }}>
+                      <Text numberOfLines={1} style={{ width: "100%", color: colors.primary, fontSize: 14, lineHeight: 18, fontWeight: "800" }}>{displayName}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={42} />
+                        <View style={{ width: 3, height: 32, borderRadius: 2, backgroundColor: running ? colors.success : colors.disabled }} />
                       </View>
+                      <Text numberOfLines={1} style={{ width: "100%", color: colors.subtext, fontSize: 10, lineHeight: 13 }}>{containerStatus(item, running, paused)}</Text>
                     </View>
                     <ContainerStatsGrid stats={stats} />
                   </Pressable>
