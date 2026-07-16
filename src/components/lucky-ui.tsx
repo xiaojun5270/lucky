@@ -48,11 +48,6 @@ export function IconTile({ icon: Icon, color, background, size = 36, iconSize = 
   return <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: background ?? colors.primarySoft }}><Icon color={color ?? colors.primary} size={iconSize} strokeWidth={2.2} /></View>;
 }
 
-export function MetricCard({ icon, label, value, color, background, valueColor }: { icon: LucideIcon; label: string; value: string; color: string; background: string; valueColor?: string }) {
-  const colors = useAppTheme();
-  return <View style={{ flexGrow: 1, flexBasis: 150, minHeight: 90, borderRadius: CARD_RADIUS, padding: 13, gap: 9, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS) }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><IconTile icon={icon} color={color} background={background} size={32} iconSize={16} /><Text numberOfLines={1} style={{ flex: 1, color: colors.subtext, fontSize: 12, lineHeight: 17, fontWeight: '600' }}>{label}</Text></View><Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.86} style={{ color: valueColor ?? colors.text, fontSize: 12, lineHeight: 17, fontWeight: '700' }}>{value || '--'}</Text></View>;
-}
-
 export function EmptyState({ message, icon: Icon = Inbox }: { message: string; icon?: LucideIcon }) {
   const colors = useAppTheme();
   return <Panel><View style={{ alignItems: 'center', paddingVertical: 20, gap: 10 }}><IconTile icon={Icon} color={colors.subtext} background={colors.mutedCard} size={42} iconSize={21} /><Text style={{ color: colors.subtext, textAlign: 'center' }}>{message}</Text></View></Panel>;

@@ -57,6 +57,19 @@ export async function loginToLucky(input: LuckyLoginInput) {
   return token;
 }
 
+function luckyModuleItems(modules: LuckyRecord): LuckyListItem[] {
+  const standardModules = Array.isArray(modules.Modules) ? modules.Modules : [];
+  const extraModules = Array.isArray(modules.extraModules) ? modules.extraModules : [];
+  const moduleItems = [...standardModules, ...extraModules]
+    .filter((value): value is string => typeof value === 'string')
+    .map((name) => ({ Key: name, Name: name, Enable: true }));
+  return moduleItems.length ? moduleItems : firstArray(modules, ['list', 'modules', 'moduleList']);
+}
+
+export async function getLuckyModules() {
+  return luckyModuleItems(await luckyFetch('/api/modules/list'));
+}
+
 export async function getLuckyDashboard(): Promise<LuckyDashboard> {
   const [status, info, modules, version] = await Promise.all([
     luckyFetch('/api/status'),
@@ -64,15 +77,10 @@ export async function getLuckyDashboard(): Promise<LuckyDashboard> {
     luckyFetch('/api/modules/list'),
     luckyFetch('/version'),
   ]);
-  const standardModules = Array.isArray(modules.Modules) ? modules.Modules : [];
-  const extraModules = Array.isArray(modules.extraModules) ? modules.extraModules : [];
-  const moduleItems = [...standardModules, ...extraModules]
-    .filter((value): value is string => typeof value === 'string')
-    .map((name) => ({ Key: name, Name: name, Enable: true }));
   return {
     status,
     info: { ...info, ...version },
-    modules: moduleItems.length ? moduleItems : firstArray(modules, ['list', 'modules', 'moduleList']),
+    modules: luckyModuleItems(modules),
   };
 }
 
