@@ -354,25 +354,58 @@ export const getDockerDiskUsage = () => callDockerApi("disk-usage");
 export const getDockerMonitorStatus = () => callDockerApi("monitor/status");
 export const getDockerSelfContainerInfo = () => callDockerApi("self-container");
 
+async function optionalDockerRequest<T>(request: Promise<T>) {
+  try {
+    return await request;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getDockerOverview() {
-  const [infoRaw, versionRaw, diskRaw, monitorRaw, containers, images] = await Promise.all([
-    getDockerInfo(),
-    getDockerVersion(),
-    getDockerDiskUsage(),
-    getDockerMonitorStatus(),
-    listDockerContainers().then((result) => result.items).catch(() => undefined),
-    listDockerImages().then((result) => result.items).catch(() => undefined),
+  const [infoRaw, containersResult, imagesResult, composeResult, networksResult, volumesResult] = await Promise.all([
+    optionalDockerRequest(getDockerInfo()),
+    optionalDockerRequest(listDockerContainers()),
+    optionalDockerRequest(listDockerImages()),
+    optionalDockerRequest(listDockerComposeProjects()),
+    optionalDockerRequest(listDockerNetworks()),
+    optionalDockerRequest(listDockerVolumes()),
   ]);
-  const fallbackContainers = findScalar(infoRaw, ["Containers", "containers"])
-    ?? findScalar(diskRaw, ["Containers", "containers"]);
-  const fallbackImages = findScalar(infoRaw, ["Images", "images"]);
+
+  if (!infoRaw && !containersResult && !imagesResult && !composeResult && !networksResult && !volumesResult) {
+    throw new Error("Docker 总览接口均不可用");
+  }
+
+  const info = findRecord(infoRaw ?? {}, ["info", "dockerInfo", "data", "result"]);
+  const containers = containersResult?.items ?? [];
+  const images = imagesResult?.items ?? [];
+  const fallbackContainers = findScalar(info, ["Containers", "containers"]);
+  const fallbackImages = findScalar(info, ["Images", "images"]);
+  const fallbackContainerCount = Number(fallbackContainers);
+  const fallbackImageCount = Number(fallbackImages);
+  const imageSize = images.reduce((total, image) => {
+    const size = findScalar(image, ["Size", "size", "VirtualSize", "virtualSize"]);
+    return total + (Number(size) || 0);
+  }, 0);
+
   return {
-    info: findRecord(infoRaw, ["info", "dockerInfo", "data", "result"]),
-    version: findScalar(versionRaw, ["Version", "ServerVersion", "version", "ApiVersion"]),
-    disk: findRecord(diskRaw, ["disk_usage", "diskUsage", "usage", "data", "result"]),
-    monitor: findScalar(monitorRaw, ["Status", "State", "Running", "Enable", "status", "state"]),
-    containerCount: containers?.length ?? Number(fallbackContainers ?? 0),
-    imageCount: images?.length ?? Number(fallbackImages ?? 0),
+    info,
+    containers,
+    containersAvailable: Boolean(containersResult),
+    containerCount: containersResult
+      ? containers.length
+      : fallbackContainers === undefined || !Number.isFinite(fallbackContainerCount)
+        ? undefined
+        : fallbackContainerCount,
+    imageCount: imagesResult
+      ? images.length
+      : fallbackImages === undefined || !Number.isFinite(fallbackImageCount)
+        ? undefined
+        : fallbackImageCount,
+    imageSize: imagesResult ? imageSize : undefined,
+    composeCount: composeResult?.items.length,
+    networkCount: networksResult?.items.length,
+    volumeCount: volumesResult?.items.length,
   };
 }
 

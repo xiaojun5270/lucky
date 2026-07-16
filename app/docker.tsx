@@ -1,19 +1,16 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Image as ExpoImage } from "expo-image";
+import { useIsFocused } from "expo-router";
 import {
   Activity,
-  BadgeInfo,
   Box,
-  CircleCheckBig,
   CircleStop,
   Container,
   Database,
   FileText,
   Folder,
   Gauge,
-  HardDrive,
   Image,
-  Layers3,
   Network,
   Pause,
   Pencil,
@@ -31,15 +28,15 @@ import {
   X,
 } from "lucide-react-native";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, AppState, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle } from "react-native-svg";
 
 import {
   EmptyState,
   ErrorState,
   FullScreenSafeArea,
   IconTile,
-  MetricCard,
   Page,
   Panel,
   SearchField,
@@ -47,6 +44,7 @@ import {
   SheetHandle,
 } from "@/src/components/lucky-ui";
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
+import { useLuckyStatus } from "@/src/hooks/use-lucky-status";
 import { queryClient } from "@/src/lib/query-client";
 import { useAppTheme } from "@/src/lib/theme";
 import { getIconLibraryIcons } from "@/src/services/iconlib";
@@ -68,6 +66,7 @@ import {
   discoverDockerCompose,
   editDockerContainer,
   getDockerConfig,
+  getAllDockerContainerStats,
   getDockerComposeLogs,
   getDockerContainer,
   getDockerContainerLogs,
@@ -117,6 +116,9 @@ type DockerView =
   | "logs";
 type Editor = { type: string; title: string; value: LuckyRecord; key?: string };
 
+const emptyDockerInfo: LuckyRecord = {};
+const emptyDockerContainers: LuckyRecord[] = [];
+
 const tabs = [
   ["containers", "容器", Container],
   ["images", "镜像", Image],
@@ -157,12 +159,6 @@ function nested(payload: LuckyRecord, keys: string[]) {
   }
   return payload;
 }
-function isRunning(item: LuckyRecord) {
-  return /running|active|up/i.test(
-    pick(item, ["State", "state", "Status", "status"]),
-  );
-}
-
 function containerStatus(item: LuckyRecord, running: boolean, paused: boolean) {
   if (paused) return "已暂停";
   const raw = pick(item, ["Status", "status", "State", "state"], running ? "运行中" : "已停止");
@@ -208,29 +204,908 @@ function deepDockerValue(source: unknown, key: string): unknown {
   return undefined;
 }
 
-function sumDockerField(items: LuckyRecord[], key: string) {
-  return items.reduce((total, item) => total + Number(deepDockerValue(item, key) ?? 0), 0);
+function dockerNumber(source: unknown, keys: string[]) {
+  for (const key of keys) {
+    const value = deepDockerValue(source, key);
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+      if (match) return Number(match[0]);
+    }
+  }
+  return undefined;
 }
 
-function DockerDiskSummary({ value }: { value: LuckyRecord }) {
+function parseDockerBytes(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const match = value
+    .trim()
+    .replace(/,/g, "")
+    .match(/^(-?\d+(?:\.\d+)?)\s*([kmgtpe]?i?b)?/i);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? "b").toLowerCase();
+  const powers: Record<string, number> = {
+    b: 0,
+    kb: 1,
+    kib: 1,
+    mb: 2,
+    mib: 2,
+    gb: 3,
+    gib: 3,
+    tb: 4,
+    tib: 4,
+    pb: 5,
+    pib: 5,
+    eb: 6,
+    eib: 6,
+  };
+  const base = unit.includes("i") ? 1024 : 1000;
+  return amount * base ** (powers[unit] ?? 0);
+}
+
+function dockerValue(source: unknown, keys: string[]) {
+  for (const key of keys) {
+    const value = deepDockerValue(source, key);
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function dockerDirectValue(source: LuckyRecord, keys: string[]) {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const match = Object.keys(source).find((key) => wanted.has(key.toLowerCase()));
+  return match ? source[match] : undefined;
+}
+
+function dockerChildRecord(source: LuckyRecord, keys: string[]) {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  for (const [key, value] of Object.entries(source)) {
+    if (
+      wanted.has(key.toLowerCase()) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      return value as LuckyRecord;
+    }
+  }
+  return undefined;
+}
+
+function dockerCpuPercent(source: LuckyRecord) {
+  const direct = dockerNumber(source, [
+    "CPUPercent",
+    "cpuPercent",
+    "cpu_percent",
+    "CPUPerc",
+    "cpuPerc",
+  ]);
+  if (direct !== undefined) return Math.max(0, direct);
+
+  const cpuStats = dockerChildRecord(source, ["cpu_stats", "cpuStats", "CPUStats"]);
+  const previous = dockerChildRecord(source, ["precpu_stats", "preCpuStats", "PreCPUStats"]);
+  const fallback = () => dockerNumber(source, [
+    "CPUUsage",
+    "cpuUsage",
+    "cpu_usage",
+    "CPU",
+    "cpu",
+  ]);
+  if (!cpuStats || !previous) return fallback();
+  const cpuUsage = dockerChildRecord(cpuStats, ["cpu_usage", "cpuUsage", "CPUUsage"]);
+  const previousUsage = dockerChildRecord(previous, ["cpu_usage", "cpuUsage", "CPUUsage"]);
+  if (!cpuUsage || !previousUsage) return fallback();
+  const cpuDelta =
+    (dockerNumber(cpuUsage, ["total_usage", "totalUsage", "TotalUsage"]) ?? 0) -
+    (dockerNumber(previousUsage, ["total_usage", "totalUsage", "TotalUsage"]) ?? 0);
+  const systemDelta =
+    (dockerNumber(cpuStats, ["system_cpu_usage", "systemCpuUsage", "SystemCPUUsage"]) ?? 0) -
+    (dockerNumber(previous, ["system_cpu_usage", "systemCpuUsage", "SystemCPUUsage"]) ?? 0);
+  const perCpu = dockerValue(cpuUsage, ["percpu_usage", "perCpuUsage", "PercpuUsage"]);
+  const cpuCount =
+    dockerNumber(cpuStats, ["online_cpus", "onlineCpus", "OnlineCPUs"]) ??
+    (Array.isArray(perCpu) ? perCpu.length : 1);
+  const calculated = cpuDelta > 0 && systemDelta > 0
+    ? (cpuDelta / systemDelta) * Math.max(1, cpuCount) * 100
+    : undefined;
+  return calculated ?? fallback();
+}
+
+function dockerMemoryValues(source: LuckyRecord) {
+  const rawUsage = dockerValue(source, [
+    "MemoryUsage",
+    "memoryUsage",
+    "memory_usage",
+    "MemUsage",
+    "memUsage",
+    "mem_usage",
+    "Memory",
+    "memory",
+    "Mem",
+    "mem",
+  ]);
+  let usage = parseDockerBytes(rawUsage);
+  let limit = parseDockerBytes(
+    dockerValue(source, [
+      "MemoryLimit",
+      "memoryLimit",
+      "memory_limit",
+      "MemLimit",
+      "memLimit",
+      "mem_limit",
+    ]),
+  );
+
+  if (typeof rawUsage === "string" && rawUsage.includes("/")) {
+    const [usedPart, limitPart] = rawUsage.split("/", 2);
+    usage = parseDockerBytes(usedPart) ?? usage;
+    limit = parseDockerBytes(limitPart) ?? limit;
+  }
+
+  const memoryStats = dockerChildRecord(source, [
+    "memory_stats",
+    "memoryStats",
+    "MemoryStats",
+  ]);
+  if (usage === undefined && memoryStats) {
+    const raw = dockerNumber(memoryStats, ["usage", "Usage"]);
+    const detail = dockerChildRecord(memoryStats, ["stats", "Stats"]);
+    const cache = detail
+      ? dockerNumber(detail, ["total_inactive_file", "inactive_file", "cache", "Cache"]) ?? 0
+      : 0;
+    if (raw !== undefined) usage = cache > 0 && cache < raw ? raw - cache : raw;
+  }
+  if (limit === undefined && memoryStats) {
+    limit = dockerNumber(memoryStats, ["limit", "Limit"]);
+  }
+
+  const directPercent = dockerNumber(source, [
+    "MemoryPercent",
+    "memoryPercent",
+    "memory_percent",
+    "MemPercent",
+    "memPercent",
+    "MemPerc",
+    "memPerc",
+  ]);
+  const percent =
+    directPercent !== undefined
+      ? directPercent
+      : usage !== undefined && limit && limit > 0
+        ? (usage / limit) * 100
+        : undefined;
+  return {
+    usage: usage === undefined ? undefined : Math.max(0, usage),
+    limit,
+    percent: percent === undefined ? undefined : Math.max(0, percent),
+  };
+}
+
+function dockerBytePair(value: unknown) {
+  if (typeof value === "string" && value.includes("/")) {
+    const [left, right] = value.split("/", 2);
+    return [parseDockerBytes(left), parseDockerBytes(right)] as const;
+  }
+  if (Array.isArray(value) && value.length >= 2) {
+    return [parseDockerBytes(value[0]), parseDockerBytes(value[1])] as const;
+  }
+  return [undefined, undefined] as const;
+}
+
+function dockerIoValues(source: LuckyRecord) {
+  const [combinedRx, combinedTx] = dockerBytePair(dockerDirectValue(source, [
+    "NetIO",
+    "netIO",
+    "net_io",
+    "NetworkIO",
+    "networkIO",
+    "network_io",
+  ]));
+  let networkRx = parseDockerBytes(dockerDirectValue(source, [
+    "NetworkRx",
+    "NetworkRX",
+    "networkRx",
+    "network_rx",
+    "network_rx_bytes",
+    "NetworkInput",
+    "networkInput",
+    "network_input",
+    "NetInput",
+    "netInput",
+    "net_input",
+    "RxBytes",
+    "rxBytes",
+    "rx_bytes",
+  ])) ?? combinedRx;
+  let networkTx = parseDockerBytes(dockerDirectValue(source, [
+    "NetworkTx",
+    "NetworkTX",
+    "networkTx",
+    "network_tx",
+    "network_tx_bytes",
+    "NetworkOutput",
+    "networkOutput",
+    "network_output",
+    "NetOutput",
+    "netOutput",
+    "net_output",
+    "TxBytes",
+    "txBytes",
+    "tx_bytes",
+  ])) ?? combinedTx;
+
+  const networks = dockerChildRecord(source, ["networks", "Networks", "network", "Network"]);
+  if ((networkRx === undefined || networkTx === undefined) && networks) {
+    const directRxKey = Object.keys(networks).find((key) => ["rx_bytes", "rxbytes"].includes(key.toLowerCase()));
+    const directTxKey = Object.keys(networks).find((key) => ["tx_bytes", "txbytes"].includes(key.toLowerCase()));
+    const directRx = directRxKey ? parseDockerBytes(networks[directRxKey]) : undefined;
+    const directTx = directTxKey ? parseDockerBytes(networks[directTxKey]) : undefined;
+    let rx = directRx ?? 0;
+    let tx = directTx ?? 0;
+    let foundRx = directRx !== undefined;
+    let foundTx = directTx !== undefined;
+    for (const value of Object.values(networks)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const entry = value as LuckyRecord;
+      const nextRx = dockerNumber(entry, ["rx_bytes", "rxBytes", "RxBytes"]);
+      const nextTx = dockerNumber(entry, ["tx_bytes", "txBytes", "TxBytes"]);
+      if (nextRx !== undefined) {
+        rx += nextRx;
+        foundRx = true;
+      }
+      if (nextTx !== undefined) {
+        tx += nextTx;
+        foundTx = true;
+      }
+    }
+    if (networkRx === undefined && foundRx) networkRx = rx;
+    if (networkTx === undefined && foundTx) networkTx = tx;
+  }
+
+  const [combinedRead, combinedWrite] = dockerBytePair(dockerDirectValue(source, [
+    "BlockIO",
+    "blockIO",
+    "blockIo",
+    "block_io",
+    "BlkIO",
+    "blkIO",
+    "DiskIO",
+    "diskIO",
+    "disk_io",
+  ]));
+  let blockRead = parseDockerBytes(dockerDirectValue(source, [
+    "BlockRead",
+    "blockRead",
+    "block_read",
+    "block_read_bytes",
+    "DiskRead",
+    "diskRead",
+    "disk_read",
+    "BlockInput",
+    "blockInput",
+    "block_input",
+    "IORead",
+    "ioRead",
+    "io_read",
+    "ReadBytes",
+    "readBytes",
+    "read_bytes",
+  ])) ?? combinedRead;
+  let blockWrite = parseDockerBytes(dockerDirectValue(source, [
+    "BlockWrite",
+    "blockWrite",
+    "block_write",
+    "block_write_bytes",
+    "DiskWrite",
+    "diskWrite",
+    "disk_write",
+    "BlockOutput",
+    "blockOutput",
+    "block_output",
+    "IOWrite",
+    "ioWrite",
+    "io_write",
+    "WriteBytes",
+    "writeBytes",
+    "write_bytes",
+  ])) ?? combinedWrite;
+
+  const blockStats = dockerChildRecord(source, ["blkio_stats", "blkioStats", "BlkioStats"]);
+  const recursiveServiceBytes = blockStats
+    ? dockerValue(blockStats, [
+        "io_service_bytes_recursive",
+        "ioServiceBytesRecursive",
+        "IoServiceBytesRecursive",
+      ])
+    : undefined;
+  const serviceBytes = Array.isArray(recursiveServiceBytes) && recursiveServiceBytes.length
+    ? recursiveServiceBytes
+    : blockStats
+      ? dockerValue(blockStats, ["io_service_bytes", "ioServiceBytes", "IoServiceBytes"])
+      : undefined;
+  if ((blockRead === undefined || blockWrite === undefined) && Array.isArray(serviceBytes)) {
+    let read = 0;
+    let write = 0;
+    let foundRead = false;
+    let foundWrite = false;
+    for (const value of serviceBytes) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const entry = value as LuckyRecord;
+      const operation = pick(entry, ["op", "Op", "operation", "Operation"]).toLowerCase();
+      const amount = dockerNumber(entry, ["value", "Value"]);
+      if (amount === undefined) continue;
+      if (operation === "read") {
+        read += amount;
+        foundRead = true;
+      }
+      if (operation === "write") {
+        write += amount;
+        foundWrite = true;
+      }
+    }
+    if (blockRead === undefined && foundRead) blockRead = read;
+    if (blockWrite === undefined && foundWrite) blockWrite = write;
+  }
+
+  return { networkRx, networkTx, blockRead, blockWrite };
+}
+
+function hasDockerStatShape(record: LuckyRecord) {
+  const keys = Object.keys(record).map((key) => key.toLowerCase().replace(/[^a-z]/g, ""));
+  return keys.some(
+    (key) =>
+      key === "cpu" ||
+      key === "memory" ||
+      key === "mem" ||
+      key.includes("cpupercent") ||
+      key.includes("cpuperc") ||
+      key.includes("cpuusage") ||
+      key.includes("cpustats") ||
+      key.includes("memoryusage") ||
+      key.includes("memusage") ||
+      key.includes("memorypercent") ||
+      key.includes("memperc") ||
+      key.includes("memorystats") ||
+      key === "networks" ||
+      key === "network" ||
+      key.includes("networkio") ||
+      key.includes("netio") ||
+      key.includes("networkrx") ||
+      key.includes("networktx") ||
+      key === "rxbytes" ||
+      key === "txbytes" ||
+      key.includes("blockio") ||
+      key.includes("blockread") ||
+      key.includes("blockwrite") ||
+      key.includes("diskread") ||
+      key.includes("diskwrite") ||
+      key === "readbytes" ||
+      key === "writebytes" ||
+      key.includes("blkiostats"),
+  );
+}
+
+type DockerStatCandidate = { record: LuckyRecord; hint: string };
+
+function collectDockerStats(source: unknown) {
+  const rows: DockerStatCandidate[] = [];
+  const visited = new Set<object>();
+  const wrapperKeys = new Set(["data", "result", "stats", "list", "containers"]);
+
+  function visit(value: unknown, hint = "", depth = 0) {
+    if (!value || typeof value !== "object" || depth > 7 || visited.has(value)) return;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, hint, depth + 1));
+      return;
+    }
+    const record = value as LuckyRecord;
+    if (hasDockerStatShape(record)) {
+      rows.push({ record, hint });
+      return;
+    }
+    const ownName = pick(record, ["Name", "name", "ContainerName", "containerName"]);
+    for (const [key, child] of Object.entries(record)) {
+      const nextHint = ownName || (wrapperKeys.has(key.toLowerCase()) ? hint : key);
+      visit(child, nextHint, depth + 1);
+    }
+  }
+
+  visit(source);
+  return rows;
+}
+
+type DockerContainerState = "running" | "paused" | "exited" | "created" | "other";
+
+function dockerContainerState(item: LuckyRecord): DockerContainerState {
+  const state = [
+    pick(item, ["State", "state"]),
+    pick(item, ["Status", "status"]),
+  ].join(" ").toLowerCase();
+  if (/paused/.test(state)) return "paused";
+  if (/created/.test(state)) return "created";
+  if (/exited|stopped|dead|removing/.test(state)) return "exited";
+  if (/running|active|\bup\b|restarting/.test(state)) return "running";
+  return "other";
+}
+
+function cleanDockerContainerName(value: string) {
+  return value.split(",")[0]?.trim().replace(/^\/+/, "") ?? "";
+}
+
+type DockerStatRow = {
+  key: string;
+  name: string;
+  cpu: number;
+  hasCpu: boolean;
+  memory: number;
+  hasMemory: boolean;
+  memoryPercent: number;
+  hasMemoryPercent: boolean;
+  networkRx: number;
+  hasNetworkRx: boolean;
+  networkTx: number;
+  hasNetworkTx: boolean;
+  blockRead: number;
+  hasBlockRead: boolean;
+  blockWrite: number;
+  hasBlockWrite: boolean;
+};
+
+function dockerStatRows(source: unknown, containers: LuckyRecord[]) {
+  const containerInfo = containers.map((container, index) => ({
+    container,
+    id: pick(container, ["Id", "ID", "id", "Container", "ContainerID", "ContainerId", "containerId"], String(index)),
+    name: cleanDockerContainerName(
+      pick(container, ["Names", "Name", "name", "ContainerName", "containerName"]),
+    ),
+  }));
+  const byKey = new Map<string, DockerStatRow>();
+
+  for (const [index, candidate] of collectDockerStats(source).entries()) {
+    const rawId = pick(candidate.record, [
+      "Id",
+      "ID",
+      "id",
+      "Container",
+      "ContainerID",
+      "ContainerId",
+      "containerId",
+      "container_id",
+    ]);
+    const rawName = cleanDockerContainerName(
+      pick(candidate.record, ["Name", "name", "ContainerName", "containerName"]),
+    );
+    const match = containerInfo.find(
+      (item) =>
+        (rawId && (item.id.startsWith(rawId) || rawId.startsWith(item.id))) ||
+        (candidate.hint &&
+          (item.id.startsWith(candidate.hint) || candidate.hint.startsWith(item.id))) ||
+        (rawName && item.name === rawName) ||
+        (candidate.hint && item.name === cleanDockerContainerName(candidate.hint)),
+    );
+    if (match && ["exited", "created"].includes(dockerContainerState(match.container))) continue;
+
+    const cpu = dockerCpuPercent(candidate.record);
+    const memory = dockerMemoryValues(candidate.record);
+    const io = dockerIoValues(candidate.record);
+    if (
+      cpu === undefined &&
+      memory.usage === undefined &&
+      io.networkRx === undefined &&
+      io.networkTx === undefined &&
+      io.blockRead === undefined &&
+      io.blockWrite === undefined
+    ) continue;
+    const name =
+      match?.name ||
+      rawName ||
+      cleanDockerContainerName(candidate.hint) ||
+      `容器 ${index + 1}`;
+    const key = match?.id || rawId || candidate.hint || `${name}-${index}`;
+    const next: DockerStatRow = {
+      key,
+      name,
+      cpu: cpu ?? 0,
+      hasCpu: cpu !== undefined,
+      memory: memory.usage ?? 0,
+      hasMemory: memory.usage !== undefined,
+      memoryPercent: memory.percent ?? 0,
+      hasMemoryPercent: memory.percent !== undefined,
+      networkRx: io.networkRx ?? 0,
+      hasNetworkRx: io.networkRx !== undefined,
+      networkTx: io.networkTx ?? 0,
+      hasNetworkTx: io.networkTx !== undefined,
+      blockRead: io.blockRead ?? 0,
+      hasBlockRead: io.blockRead !== undefined,
+      blockWrite: io.blockWrite ?? 0,
+      hasBlockWrite: io.blockWrite !== undefined,
+    };
+    const current = byKey.get(key);
+    byKey.set(key, current ? {
+      ...current,
+      name: current.name || next.name,
+      cpu: next.hasCpu ? next.cpu : current.cpu,
+      hasCpu: current.hasCpu || next.hasCpu,
+      memory: next.hasMemory ? next.memory : current.memory,
+      hasMemory: current.hasMemory || next.hasMemory,
+      memoryPercent: next.hasMemoryPercent ? next.memoryPercent : current.memoryPercent,
+      hasMemoryPercent: current.hasMemoryPercent || next.hasMemoryPercent,
+      networkRx: next.hasNetworkRx ? next.networkRx : current.networkRx,
+      hasNetworkRx: current.hasNetworkRx || next.hasNetworkRx,
+      networkTx: next.hasNetworkTx ? next.networkTx : current.networkTx,
+      hasNetworkTx: current.hasNetworkTx || next.hasNetworkTx,
+      blockRead: next.hasBlockRead ? next.blockRead : current.blockRead,
+      hasBlockRead: current.hasBlockRead || next.hasBlockRead,
+      blockWrite: next.hasBlockWrite ? next.blockWrite : current.blockWrite,
+      hasBlockWrite: current.hasBlockWrite || next.hasBlockWrite,
+    } : next);
+  }
+  return [...byKey.values()];
+}
+
+function formatPercent(value: number | undefined, digits = 1) {
+  return value === undefined || !Number.isFinite(value) ? "--" : `${value.toFixed(digits)}%`;
+}
+
+function DockerGauge({ label, value, color, digits = 1 }: { label: string; value?: number; color: string; digits?: number }) {
   const colors = useAppTheme();
-  const images = (deepDockerValue(value, "Images") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
-  const containers = (deepDockerValue(value, "Containers") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
-  const volumes = (deepDockerValue(value, "Volumes") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
-  const buildCache = (deepDockerValue(value, "BuildCache") as unknown[] | undefined)?.filter((item): item is LuckyRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item)) ?? [];
-  const rows = [
-    { label: "镜像层", count: `${images.length} 个镜像`, size: Number(deepDockerValue(value, "LayersSize") ?? sumDockerField(images, "Size")), icon: Layers3, color: colors.primary, background: colors.primarySoft },
-    { label: "容器可写层", count: `${containers.length} 个容器`, size: sumDockerField(containers, "SizeRw"), icon: Container, color: colors.success, background: colors.successBg },
-    { label: "数据卷", count: `${volumes.length} 个数据卷`, size: sumDockerField(volumes, "Size"), icon: Database, color: colors.warning, background: colors.warningBg },
-    { label: "构建缓存", count: `${buildCache.length} 项缓存`, size: sumDockerField(buildCache, "Size"), icon: Box, color: colors.cyan, background: colors.cyanBg },
-  ];
-  return <View style={{ gap: 0 }}>
-    {rows.map(({ label, count, size, icon: Icon, color, background }, index) => <View key={label} style={{ minHeight: 64, flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}>
-      <View style={{ width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: background }}><Icon color={color} size={17} strokeWidth={2.2} /></View>
-      <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>{label}</Text><Text style={{ color: colors.subtext, fontSize: 11, marginTop: 3 }}>{count}</Text></View>
-      <View style={{ paddingHorizontal: 9, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.mutedCard }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{size > 0 ? bytes(size) : "0 B"}</Text></View>
-    </View>)}
+  const size = 94;
+  const radius = 34;
+  const circumference = Math.PI * 2 * radius;
+  const arc = circumference * 0.75;
+  const progress = value === undefined ? 0 : Math.min(100, Math.max(0, value));
+  return <View
+    accessibilityRole="progressbar"
+    accessibilityLabel={`${label}使用率`}
+    accessibilityValue={value === undefined
+      ? { text: "暂无数据" }
+      : { min: 0, max: 100, now: progress, text: formatPercent(value, digits) }}
+    style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}
+  >
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={colors.muted}
+        strokeWidth={8}
+        strokeLinecap="round"
+        strokeDasharray={`${arc} ${circumference}`}
+        transform={`rotate(135 ${size / 2} ${size / 2})`}
+      />
+      {value !== undefined && progress > 0 ? <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={8}
+        strokeLinecap="round"
+        strokeDasharray={`${arc * (progress / 100)} ${circumference}`}
+        transform={`rotate(135 ${size / 2} ${size / 2})`}
+      /> : null}
+    </Svg>
+    <View pointerEvents="none" style={{ position: "absolute", alignItems: "center" }}>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={{ maxWidth: 70, color: colors.text, fontSize: 18, fontWeight: "800" }}>
+        {formatPercent(value, digits)}
+      </Text>
+    </View>
   </View>;
+}
+
+function DockerResourceCard({
+  title,
+  color,
+  primaryLabel,
+  primaryValue,
+  secondaryLabel,
+  secondaryValue,
+  gaugeValue,
+  digits,
+}: {
+  title: string;
+  color: string;
+  primaryLabel: string;
+  primaryValue: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  gaugeValue?: number;
+  digits?: number;
+}) {
+  const colors = useAppTheme();
+  return <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 330, minWidth: 260 }}>
+    <Panel>
+      <View style={{ minHeight: 116, flexDirection: "row", alignItems: "center", gap: 14 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 13 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: "800" }}>{title}</Text>
+          </View>
+          <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ flex: 1, color: colors.subtext, fontSize: 11 }}>{primaryLabel}</Text>
+              <Text numberOfLines={1} style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{primaryValue}</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ flex: 1, color: colors.subtext, fontSize: 11 }}>{secondaryLabel}</Text>
+              <Text numberOfLines={1} style={{ color, fontSize: 15, fontWeight: "800" }}>{secondaryValue}</Text>
+            </View>
+          </View>
+        </View>
+        <DockerGauge label={title} value={gaugeValue} color={color} digits={digits} />
+      </View>
+    </Panel>
+  </View>;
+}
+
+function DockerLiveResourceCards({ info, active }: { info: LuckyRecord; active: boolean }) {
+  const colors = useAppTheme();
+  const live = useLuckyStatus(active);
+  const hasLiveData = active && live.connected && Boolean(live.data);
+  const cpuCount = dockerNumber(info, ["NCPU", "Ncpu", "CPUCount", "cpuCount", "NumCPU"]);
+  const totalMemory = (hasLiveData ? live.data?.totalMem : 0) || parseDockerBytes(
+    dockerValue(info, ["MemTotal", "memTotal", "TotalMemory", "totalMemory"]),
+  );
+  const cpuUsage = hasLiveData && live.data && Number.isFinite(live.data.usedCpu)
+    ? live.data.usedCpu
+    : undefined;
+  const memoryUsage = hasLiveData ? live.data?.usedMem : undefined;
+  const memoryPercent = memoryUsage !== undefined && totalMemory
+    ? (memoryUsage / totalMemory) * 100
+    : undefined;
+  const connectionValue = live.error ? "连接中断" : "连接中";
+
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+    <DockerResourceCard
+      title="CPU"
+      color={colors.primary}
+      primaryLabel="逻辑核心"
+      primaryValue={cpuCount === undefined ? "--" : String(Math.round(cpuCount))}
+      secondaryLabel="使用率 (%)"
+      secondaryValue={cpuUsage === undefined ? connectionValue : formatPercent(cpuUsage, 2)}
+      gaugeValue={cpuUsage}
+      digits={2}
+    />
+    <DockerResourceCard
+      title="内存"
+      color={colors.success}
+      primaryLabel="总可用内存"
+      primaryValue={totalMemory ? bytes(totalMemory) : "--"}
+      secondaryLabel="使用率 (%)"
+      secondaryValue={memoryPercent === undefined ? connectionValue : formatPercent(memoryPercent, 1)}
+      gaugeValue={memoryPercent}
+    />
+  </View>;
+}
+
+function DockerSummaryItem({
+  icon: Icon,
+  color,
+  background,
+  valueColor,
+  value,
+  suffix,
+  label,
+  badge,
+  onPress,
+}: {
+  icon: typeof Container;
+  color: string;
+  background: string;
+  valueColor?: string;
+  value: string;
+  suffix?: string;
+  label: string;
+  badge?: string;
+  onPress: () => void;
+}) {
+  const colors = useAppTheme();
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={`查看${label}`}
+    onPress={onPress}
+    style={({ pressed }) => ({
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 120,
+      minWidth: 118,
+      minHeight: 64,
+      padding: 8,
+      borderRadius: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: pressed ? colors.mutedCard : colors.card,
+      opacity: pressed ? 0.72 : 1,
+    })}
+  >
+    <View style={{ width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: background }}>
+      <Icon color={color} size={19} strokeWidth={2.2} />
+    </View>
+    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Text numberOfLines={1} style={{ color: valueColor ?? colors.text, fontSize: 17, fontWeight: "800" }}>{value}</Text>
+        {suffix ? <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 12, fontWeight: "700" }}>{suffix}</Text> : null}
+      </View>
+      <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10 }}>{label}</Text>
+      {badge ? <View style={{ alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: colors.mutedCard }}><Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 9, fontWeight: "700" }}>{badge}</Text></View> : null}
+    </View>
+  </Pressable>;
+}
+
+function DockerStateChip({ label, value, color }: { label: string; value: string; color: string }) {
+  const colors = useAppTheme();
+  return <View style={{ minHeight: 32, paddingHorizontal: 11, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", gap: 6 }}>
+    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+    <Text style={{ color: colors.subtext, fontSize: 11 }}>{label}</Text>
+    <Text style={{ color: colors.text, fontSize: 11, fontWeight: "800" }}>{value}</Text>
+  </View>;
+}
+
+function DockerRankingCard({
+  title,
+  color,
+  rows,
+  mode,
+  emptyMessage,
+  onSelectContainer,
+}: {
+  title: string;
+  color: string;
+  rows: DockerStatRow[];
+  mode: "cpu" | "memory";
+  emptyMessage: string;
+  onSelectContainer: (name: string) => void;
+}) {
+  const colors = useAppTheme();
+  const memoryMax = Math.max(1, ...rows.map((row) => row.memory));
+  return <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 360, minWidth: 260 }}>
+    <Panel>
+      <View style={{ minHeight: 28, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ width: 6, height: 20, borderRadius: 3, backgroundColor: color }} />
+        <Text style={{ flex: 1, color: colors.text, fontSize: 14, fontWeight: "800" }}>{title}</Text>
+      </View>
+      {rows.length ? <View style={{ gap: 0 }}>
+        <View style={{ minHeight: 24, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={{ width: 18, color: colors.subtext, fontSize: 9, textAlign: "center" }}>#</Text>
+          <Text style={{ flex: 1, color: colors.subtext, fontSize: 9 }}>容器名称</Text>
+          <Text style={{ minWidth: 62, color: colors.subtext, fontSize: 9, textAlign: "right" }}>{mode === "cpu" ? "使用率 (%)" : "内存占用"}</Text>
+        </View>
+        {rows.map((row, index) => {
+        const metric = mode === "cpu" ? row.cpu : row.memory;
+        const bar = mode === "cpu"
+          ? Math.min(100, Math.max(0, row.cpu))
+          : row.hasMemoryPercent
+            ? Math.min(100, Math.max(0, row.memoryPercent))
+            : (row.memory / memoryMax) * 100;
+        const barColor = mode === "cpu"
+          ? row.cpu >= 80
+            ? colors.danger
+            : row.cpu >= 50
+              ? colors.warning
+              : colors.primary
+          : row.memoryPercent >= 80
+            ? colors.danger
+            : row.memoryPercent >= 60
+              ? colors.warning
+              : colors.success;
+        return <Pressable
+          key={row.key}
+          accessibilityRole="button"
+          accessibilityLabel={`查看容器 ${row.name}`}
+          onPress={() => onSelectContainer(row.name)}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            paddingVertical: 6,
+            borderTopWidth: 1,
+            borderTopColor: colors.rowBorder,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            opacity: pressed ? 0.65 : 1,
+          })}
+        >
+          <Text style={{ width: 18, color: index === 0 ? colors.danger : index === 1 ? colors.warning : colors.subtext, fontSize: 11, fontWeight: "800", textAlign: "center" }}>{index + 1}</Text>
+          <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.primary, fontSize: 11, fontWeight: "700" }}>{row.name}</Text>
+          <View style={{ flexBasis: 90, flexShrink: 1, minWidth: 48, maxWidth: 110, height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: "hidden" }}>
+            <View style={{ width: `${Math.max(0, Math.min(100, bar))}%` as `${number}%`, height: 6, borderRadius: 3, backgroundColor: barColor }} />
+          </View>
+          <Text numberOfLines={1} style={{ minWidth: 62, color: colors.subtext, fontSize: 10, fontWeight: "700", textAlign: "right" }}>
+            {mode === "cpu" ? formatPercent(metric, 1) : metric > 0 ? bytes(metric) : "0 B"}
+          </Text>
+        </Pressable>;
+        })}
+      </View> : <View style={{ minHeight: 92, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.subtext, fontSize: 12 }}>{emptyMessage}</Text></View>}
+    </Panel>
+  </View>;
+}
+
+function DockerOverviewDashboard({
+  data,
+  active,
+  stats,
+  statsLoading,
+  statsError,
+  onSelectView,
+  onSelectContainer,
+}: {
+  data?: Awaited<ReturnType<typeof getDockerOverview>>;
+  active: boolean;
+  stats?: LuckyRecord;
+  statsLoading: boolean;
+  statsError?: string;
+  onSelectView: (view: DockerView) => void;
+  onSelectContainer: (name: string) => void;
+}) {
+  const colors = useAppTheme();
+  const containers = data?.containers ?? emptyDockerContainers;
+  const statRows = useMemo(
+    () => dockerStatRows(stats, containers),
+    [stats, containers],
+  );
+  const cpuRows = useMemo(
+    () => statRows.filter((row) => row.hasCpu).sort((left, right) => right.cpu - left.cpu).slice(0, 5),
+    [statRows],
+  );
+  const memoryRows = useMemo(
+    () => statRows.filter((row) => row.hasMemory).sort((left, right) => right.memory - left.memory).slice(0, 5),
+    [statRows],
+  );
+  const states = useMemo(() => {
+    const counts: Record<DockerContainerState, number> = {
+      running: 0,
+      paused: 0,
+      exited: 0,
+      created: 0,
+      other: 0,
+    };
+    containers.forEach((container) => {
+      counts[dockerContainerState(container)] += 1;
+    });
+    return counts;
+  }, [containers]);
+  const imageAccent = colors.mode === "dark" ? "#ff6482" : "#d63384";
+  const imageBackground = colors.mode === "dark" ? "#4a1830" : "#fce7f3";
+  const count = (value: number | undefined) => value === undefined ? "--" : String(value);
+  const statusValue = (value: number) => data?.containersAvailable ? String(value) : "--";
+  const rankingEmpty = statsError
+    ? "容器统计暂不可用"
+    : statsLoading
+      ? "正在读取容器统计"
+      : "暂无容器统计数据";
+
+  return <>
+    <SectionHeader icon={Gauge} title="Docker 总览" />
+    <DockerLiveResourceCards info={data?.info ?? emptyDockerInfo} active={active} />
+
+    <View style={{ padding: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        <DockerSummaryItem icon={Workflow} color={colors.subtext} background={colors.mutedCard} value={count(data?.composeCount)} label="Compose" onPress={() => onSelectView("compose")} />
+        <DockerSummaryItem icon={Container} color={colors.primary} background={colors.primarySoft} valueColor={colors.success} value={statusValue(states.running)} suffix={data?.containerCount === undefined ? undefined : ` / ${data.containerCount}`} label="容器" onPress={() => onSelectView("containers")} />
+        <DockerSummaryItem icon={Image} color={imageAccent} background={imageBackground} value={count(data?.imageCount)} label="镜像列表" badge={data?.imageSize === undefined ? undefined : data.imageSize > 0 ? bytes(data.imageSize) : "0 B"} onPress={() => onSelectView("images")} />
+        <DockerSummaryItem icon={Database} color={colors.success} background={colors.successBg} value={count(data?.volumeCount)} label="数据卷" onPress={() => onSelectView("volumes")} />
+        <DockerSummaryItem icon={Network} color={colors.cyan} background={colors.cyanBg} value={count(data?.networkCount)} label="网络" onPress={() => onSelectView("networks")} />
+      </View>
+    </View>
+
+    <View style={{ padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+      <Text style={{ marginRight: 4, color: colors.text, fontSize: 12, fontWeight: "800" }}>容器状态</Text>
+      <DockerStateChip label="运行中" value={statusValue(states.running)} color={colors.success} />
+      <DockerStateChip label="已暂停" value={statusValue(states.paused)} color={colors.warning} />
+      <DockerStateChip label="已退出" value={statusValue(states.exited)} color={colors.danger} />
+      <DockerStateChip label="已创建" value={statusValue(states.created)} color={colors.primary} />
+      {states.other > 0 ? <DockerStateChip label="其它" value={String(states.other)} color={colors.subtext} /> : null}
+    </View>
+
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+      <DockerRankingCard title="CPU 使用率前 5" color={colors.primary} rows={cpuRows} mode="cpu" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
+      <DockerRankingCard title="内存使用率前 5" color={colors.success} rows={memoryRows} mode="memory" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
+    </View>
+  </>;
 }
 function lines(payload?: LuckyRecord) {
   if (!payload) return [];
@@ -319,6 +1194,46 @@ function ContainerArtwork({ item, icons, running, size = 44 }: { item: LuckyReco
       />
     </View>
   );
+}
+
+function compactDockerBytes(value: number, available: boolean) {
+  if (!available) return "N/A";
+  return value > 0 ? bytes(value) : "0 B";
+}
+
+function ContainerStatsGrid({ stats }: { stats?: DockerStatRow }) {
+  const colors = useAppTheme();
+  const cpu = stats?.hasCpu ? `${stats.cpu.toFixed(1)}%` : "-";
+  const memory = stats?.hasMemoryPercent
+    ? `${stats.memoryPercent.toFixed(1)}%`
+    : stats?.hasMemory
+      ? compactDockerBytes(stats.memory, true)
+      : "-";
+  const rows = [
+    [`CPU:${cpu}`, `内存:${memory}`],
+    [
+      `↓ ${compactDockerBytes(stats?.networkRx ?? 0, stats?.hasNetworkRx === true)}`,
+      `↑ ${compactDockerBytes(stats?.networkTx ?? 0, stats?.hasNetworkTx === true)}`,
+    ],
+    [
+      `R ${compactDockerBytes(stats?.blockRead ?? 0, stats?.hasBlockRead === true)}`,
+      `W ${compactDockerBytes(stats?.blockWrite ?? 0, stats?.hasBlockWrite === true)}`,
+    ],
+  ];
+  return <View style={{ flexShrink: 1, flexBasis: 162, minWidth: 160, maxWidth: 164, marginLeft: "auto", gap: 3 }}>
+    {rows.map((row, rowIndex) => <View key={rowIndex} style={{ height: 22, borderRadius: 5, backgroundColor: colors.mutedCard, overflow: "hidden", flexDirection: "row", alignItems: "center" }}>
+      {row.map((value, index) => <View key={index} style={{ flex: 1, minWidth: 0, height: 22, paddingHorizontal: 4, borderLeftWidth: index ? 1 : 0, borderLeftColor: colors.rowBorder, alignItems: "center", justifyContent: "center" }}>
+        <Text
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          numberOfLines={1}
+          style={{ width: "100%", color: colors.subtext, fontSize: 9, lineHeight: 12, fontWeight: "600", fontVariant: ["tabular-nums"], textAlign: "center" }}
+        >
+          {value}
+        </Text>
+      </View>)}
+    </View>)}
+  </View>;
 }
 
 function IconButton({
@@ -452,13 +1367,26 @@ function DockerFormEditor({
 
 export default function DockerScreen() {
   const colors = useAppTheme();
+  const isScreenFocused = useIsFocused();
   const [view, setView] = useState<DockerView>("containers");
+  const [appIsActive, setAppIsActive] = useState(
+    AppState.currentState !== "background" && AppState.currentState !== "inactive",
+  );
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [editor, setEditor] = useState<Editor>();
   const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
+  const overviewActive = view === "overview" && isScreenFocused && appIsActive;
+  const containerStatsActive =
+    (view === "overview" || view === "containers") && isScreenFocused && appIsActive;
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      setAppIsActive(state === "active");
+    });
+    return () => subscription.remove();
+  }, []);
   const containers = useQuery({
     queryKey: ["docker", "containers"],
     queryFn: listDockerContainers,
@@ -498,7 +1426,18 @@ export default function DockerScreen() {
   const overview = useQuery({
     queryKey: ["docker", "overview"],
     queryFn: getDockerOverview,
-    enabled: view === "overview",
+    enabled: overviewActive,
+    staleTime: 30_000,
+    refetchInterval: overviewActive ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const containerStats = useQuery({
+    queryKey: ["docker", "container-stats"],
+    queryFn: getAllDockerContainerStats,
+    enabled: containerStatsActive,
+    staleTime: 8_000,
+    refetchInterval: containerStatsActive ? 10_000 : false,
+    refetchIntervalInBackground: false,
   });
   const config = useQuery({
     queryKey: ["docker", "config"],
@@ -630,6 +1569,18 @@ export default function DockerScreen() {
       (item) => !word || JSON.stringify(item).toLowerCase().includes(word),
     );
   }, [source, deferredSearch]);
+  const containerStatRows = useMemo(
+    () => dockerStatRows(containerStats.data, containers.data?.items ?? emptyDockerContainers),
+    [containerStats.data, containers.data?.items],
+  );
+  const containerStatsByKey = useMemo(() => {
+    const result = new Map<string, DockerStatRow>();
+    containerStatRows.forEach((row) => {
+      result.set(row.key, row);
+      result.set(row.name, row);
+    });
+    return result;
+  }, [containerStatRows]);
   const danger = (title: string, message: string, action: () => void) =>
     Alert.alert(title, message, [
       { text: "取消", style: "cancel" },
@@ -693,16 +1644,18 @@ export default function DockerScreen() {
       subtitle="容器、镜像与 Compose 管理"
       icon={Container}
       safeTop={false}
+      contentMaxWidth={view === "overview" ? 1120 : 820}
       refreshing={active.isFetching || (view === "settings" && maintenance.isFetching)}
       onRefresh={() => {
         active.refetch();
+        if (view === "overview" || view === "containers") containerStats.refetch();
         if (view === "settings") {
           mirrors.refetch();
           maintenance.refetch();
         }
       }}
     >
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View style={{ width: "100%", maxWidth: 820, alignSelf: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {tabs.map(([key, label, Icon]) => (
           <Pressable
             key={key}
@@ -791,26 +1744,28 @@ export default function DockerScreen() {
           {filtered.length ? (
             filtered.map((item, index) => {
               const key = keyOf(item, index);
-              const running = isRunning(item);
-              const paused = /paused/i.test(
-                pick(item, ["State", "state", "Status", "status"]),
-              );
+              const state = dockerContainerState(item);
+              const paused = state === "paused";
+              const running = state === "running" || paused;
               const name = pick(
                 item,
                 ["Names", "Name", "name"],
                 key.slice(0, 12),
               );
               const displayName = name.replace(/^\/+/, "") || name;
+              const stats = containerStatsByKey.get(key) ?? containerStatsByKey.get(displayName);
               return (
                 <View key={key} style={{ borderRadius: 8, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.card, padding: 14, gap: 12, shadowColor: colors.shadow, shadowOpacity: 0.08, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
-                  <Pressable onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 11, opacity: pressed ? 0.62 : 1 })}>
-                    <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={52} />
-                    <View style={{ width: 4, height: 42, borderRadius: 2, backgroundColor: running ? colors.success : colors.disabled }} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text numberOfLines={1} style={{ color: colors.primary, fontSize: 16, fontWeight: "800" }}>{displayName}</Text>
-                      <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 11, marginTop: 3 }}>{pick(item, ["Image", "ImageName"], "--")}</Text>
-                      <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 11, marginTop: 3 }}>{containerStatus(item, running, paused)}</Text>
+                  <Pressable onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ minHeight: 72, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, opacity: pressed ? 0.62 : 1 })}>
+                    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 140, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={52} />
+                      <View style={{ width: 4, height: 42, borderRadius: 2, backgroundColor: running ? colors.success : colors.disabled }} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text numberOfLines={1} style={{ color: colors.primary, fontSize: 16, fontWeight: "800" }}>{displayName}</Text>
+                        <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10, marginTop: 4 }}>{containerStatus(item, running, paused)}</Text>
+                      </View>
                     </View>
+                    <ContainerStatsGrid stats={stats} />
                   </Pressable>
                   <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
                   <View style={{ flexDirection: "row", gap: 6 }}>
@@ -1359,22 +2314,24 @@ export default function DockerScreen() {
         </>
       ) : null}
 
-      {view === "overview" && overview.data ? (
-        <>
-          <SectionHeader icon={Gauge} title="Docker 总览" />
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-            {[
-              { label: "运行状态", value: typeof overview.data.monitor === "boolean" ? (overview.data.monitor ? "正常" : "已停用") : String(overview.data.monitor ?? "正常"), icon: overview.data.monitor === false ? CircleStop : CircleCheckBig, color: overview.data.monitor === false ? colors.danger : colors.success, background: overview.data.monitor === false ? colors.dangerBg : colors.successBg, valueColor: overview.data.monitor === false ? colors.danger : colors.success },
-              { label: "版本", value: String(overview.data.version ?? "--"), icon: BadgeInfo, color: colors.primary, background: colors.primarySoft, valueColor: colors.text },
-              { label: "容器", value: String(overview.data.containerCount ?? 0), icon: Container, color: colors.cyan, background: colors.cyanBg },
-              { label: "镜像", value: String(overview.data.imageCount ?? 0), icon: Layers3, color: colors.warning, background: colors.warningBg },
-            ].map((metric) => <MetricCard key={metric.label} {...metric} />)}
-          </View>
-          <Panel>
-            <SectionHeader icon={HardDrive} title="磁盘占用" />
-            <DockerDiskSummary value={overview.data.disk} />
-          </Panel>
-        </>
+      {view === "overview" ? (
+        <DockerOverviewDashboard
+          data={overview.data}
+          active={overviewActive}
+          stats={containerStats.data}
+          statsLoading={containerStats.isLoading}
+          statsError={containerStats.error?.message}
+          onSelectView={(nextView) => {
+            setView(nextView);
+            setSearch("");
+            setOutput("");
+          }}
+          onSelectContainer={(name) => {
+            setView("containers");
+            setSearch(name);
+            setOutput("");
+          }}
+        />
       ) : null}
 
       {view === "settings" ? (

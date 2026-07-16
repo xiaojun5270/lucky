@@ -99,12 +99,16 @@ function statusSocketUrl() {
   return `${socketBase}/api/status/ws?Lucky-Admin-Token=${encodeURIComponent(luckySessionState.token)}&_=${Date.now()}`;
 }
 
-export function useLuckyStatus() {
+export function useLuckyStatus(enabled = true) {
   const [data, setData] = useState<LuckyLiveStatus>();
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
 
   useFocusEffect(useCallback(() => {
+    if (!enabled) {
+      setConnected(false);
+      return;
+    }
     let disposed = false;
     let socket: WebSocket | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -192,7 +196,7 @@ export function useLuckyStatus() {
       if (statusTimer) clearTimeout(statusTimer);
       socket?.close();
     };
-  }, []));
+  }, [enabled]));
 
   return { data, connected, error };
 }
