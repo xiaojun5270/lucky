@@ -141,11 +141,7 @@ export const getDockerContainerStats = (id: string) =>
 export const getDockerContainerProcesses = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/processes`);
 export const getAllDockerContainerStats = () =>
-  callDockerApi("containers", "GET", undefined, {
-    all: true,
-    includeStats: true,
-    includeNetworkMode: true,
-  });
+  callDockerApi("containers/stats-cached", "GET", undefined, undefined, 30000);
 export const commitDockerContainer = (id: string, data: LuckyRecord) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/commit`, "POST", data);
 export const copyDockerContainer = (id: string, name: string) =>

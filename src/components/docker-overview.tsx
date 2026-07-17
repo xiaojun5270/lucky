@@ -916,6 +916,7 @@ export function DockerOverviewDashboard({
   stats,
   statsLoading,
   statsError,
+  showContainerInsights = true,
   onSelectView,
   onSelectContainer,
 }: {
@@ -925,6 +926,7 @@ export function DockerOverviewDashboard({
   stats?: LuckyRecord;
   statsLoading: boolean;
   statsError?: string;
+  showContainerInsights?: boolean;
   onSelectView: (view: DockerOverviewTarget) => void;
   onSelectContainer: (name: string) => void;
 }) {
@@ -932,8 +934,8 @@ export function DockerOverviewDashboard({
   const [summaryWidth, setSummaryWidth] = useState(0);
   const containers = data?.containers ?? emptyDockerContainers;
   const statRows = useMemo(
-    () => dockerStatRows(stats, containers),
-    [stats, containers],
+    () => showContainerInsights ? dockerStatRows(stats, containers) : [],
+    [showContainerInsights, stats, containers],
   );
   const cpuRows = useMemo(
     () => statRows.filter((row) => row.hasCpu).sort((left, right) => right.cpu - left.cpu).slice(0, 5),
@@ -994,18 +996,20 @@ export function DockerOverviewDashboard({
       </View>
     </View>
 
-    <View style={{ padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-      <Text style={{ marginRight: 4, color: colors.text, fontSize: 12, fontWeight: "800" }}>容器状态</Text>
-      <DockerStateChip label="运行中" value={statusValue(states.running)} color={colors.success} />
-      <DockerStateChip label="已暂停" value={statusValue(states.paused)} color={colors.warning} />
-      <DockerStateChip label="已退出" value={statusValue(states.exited)} color={colors.danger} />
-      <DockerStateChip label="已创建" value={statusValue(states.created)} color={colors.primary} />
-      {states.other > 0 ? <DockerStateChip label="其它" value={String(states.other)} color={colors.subtext} /> : null}
-    </View>
+    {showContainerInsights ? <>
+      <View style={{ padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <Text style={{ marginRight: 4, color: colors.text, fontSize: 12, fontWeight: "800" }}>容器状态</Text>
+        <DockerStateChip label="运行中" value={statusValue(states.running)} color={colors.success} />
+        <DockerStateChip label="已暂停" value={statusValue(states.paused)} color={colors.warning} />
+        <DockerStateChip label="已退出" value={statusValue(states.exited)} color={colors.danger} />
+        <DockerStateChip label="已创建" value={statusValue(states.created)} color={colors.primary} />
+        {states.other > 0 ? <DockerStateChip label="其它" value={String(states.other)} color={colors.subtext} /> : null}
+      </View>
 
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-      <DockerRankingCard title="CPU 使用率前 5" color={colors.primary} rows={cpuRows} mode="cpu" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
-      <DockerRankingCard title="内存使用率前 5" color={colors.success} rows={memoryRows} mode="memory" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
-    </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        <DockerRankingCard title="CPU 使用率前 5" color={colors.primary} rows={cpuRows} mode="cpu" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
+        <DockerRankingCard title="内存使用率前 5" color={colors.success} rows={memoryRows} mode="memory" emptyMessage={rankingEmpty} onSelectContainer={onSelectContainer} />
+      </View>
+    </> : null}
   </>;
 }
