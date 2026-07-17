@@ -171,6 +171,17 @@ function nested(payload: LuckyRecord, keys: string[]) {
   }
   return payload;
 }
+function composeConfigText(payload: LuckyRecord) {
+  for (const source of [payload, payload.data, payload.result, payload.config]) {
+    if (typeof source === "string") return source;
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+    const record = source as LuckyRecord;
+    for (const key of ["content", "Content", "config", "Config", "yaml", "YAML"]) {
+      if (typeof record[key] === "string") return record[key] as string;
+    }
+  }
+  return "";
+}
 function containerStatus(item: LuckyRecord, running: boolean, paused: boolean) {
   if (paused) return "已暂停";
   const raw = pick(item, ["Status", "status", "State", "state"], running ? "运行中" : "已停止");
@@ -211,11 +222,12 @@ function lines(payload?: LuckyRecord) {
 }
 function composePayload(item: LuckyRecord) {
   return {
-    project_name: pick(item, ["Name", "name", "ProjectName", "project_name"]),
+    project_name: pick(item, ["Name", "name", "ProjectName", "projectName", "project_name"]),
     project_path: pick(item, [
       "Path",
       "path",
       "ProjectPath",
+      "projectPath",
       "project_path",
       "WorkingDir",
       "working_dir",
@@ -330,28 +342,42 @@ function IconButton({
   icon: Icon,
   label,
   color,
+  disabled = false,
+  fluid = false,
   onPress,
 }: {
   icon: typeof Pencil;
   label: string;
   color: string;
+  disabled?: boolean;
+  fluid?: boolean;
   onPress: () => void;
 }) {
   const colors = useAppTheme();
   return (
     <Pressable
       accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled}
       onPress={onPress}
-      style={{
-        width: 36,
-        height: 36,
+      style={({ pressed }) => ({
+        flexGrow: fluid ? 1 : 0,
+        flexShrink: fluid ? 1 : 0,
+        flexBasis: fluid ? 88 : "auto",
+        minWidth: 64,
+        minHeight: 36,
+        paddingHorizontal: 8,
         borderRadius: 8,
         backgroundColor: colors.mutedCard,
         alignItems: "center",
         justifyContent: "center",
-      }}
+        flexDirection: "row",
+        gap: 5,
+        opacity: disabled ? 0.5 : pressed ? 0.65 : 1,
+      })}
     >
       <Icon color={color} size={16} />
+      <Text numberOfLines={1} style={{ color, fontSize: 11, fontWeight: "700" }}>{label}</Text>
     </Pressable>
   );
 }
@@ -471,6 +497,7 @@ export default function DockerScreen() {
   const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
+  const [localNotice, setLocalNotice] = useState("");
   const overviewActive = view === "overview" && isScreenFocused && appIsActive;
   const containerStatsActive =
     (view === "overview" || view === "containers") && isScreenFocused && appIsActive;
@@ -537,8 +564,9 @@ export default function DockerScreen() {
     queryKey: ["docker", "container-stats"],
     queryFn: getAllDockerContainerStats,
     enabled: containerStatsActive,
-    staleTime: 8_000,
-    refetchInterval: containerStatsActive ? 10_000 : false,
+    staleTime: 3_000,
+    refetchOnMount: "always",
+    refetchInterval: containerStatsActive ? 5_000 : false,
     refetchIntervalInBackground: false,
   });
   const config = useQuery({
@@ -597,11 +625,33 @@ export default function DockerScreen() {
           String(value?.tag ?? "latest"),
         );
       if (type === "image-build") return buildDockerImage(value ?? {});
-      if (type.startsWith("compose-"))
-        return runDockerComposeAction(
-          type.replace("compose-", "") as "up",
-          value ?? {},
+      if (type === "compose-config-save") {
+        const projectPath = String(value?.project_path ?? "").trim();
+        const content = String(value?.content ?? "");
+        if (!projectPath || !content.trim()) throw new Error("Compose 配置路径或内容为空");
+        return updateDockerComposeConfig(
+          projectPath,
+          content,
         );
+      }
+      if (type === "compose-backup") {
+        const projectPath = String(value?.project_path ?? "").trim();
+        const projectName = String(value?.project_name ?? "").trim();
+        if (!projectPath || !projectName) throw new Error("Compose 项目名称或路径缺失");
+        return backupDockerCompose(
+          projectPath,
+          projectName,
+        );
+      }
+      if (type.startsWith("compose-")) {
+        const projectPath = String(value?.project_path ?? "").trim();
+        const projectName = String(value?.project_name ?? "").trim();
+        if (!projectPath || !projectName) throw new Error("Compose 项目名称或路径缺失");
+        return runDockerComposeAction(
+          type.replace("compose-", "") as "up" | "down" | "start" | "stop" | "restart",
+          { ...value, project_path: projectPath, project_name: projectName },
+        );
+      }
       if (type === "network-create") return createDockerNetwork(value ?? {});
       if (type === "network-remove") return removeDockerNetwork(key ?? "");
       if (type === "volume-create") return createDockerVolume(value ?? {});
@@ -625,12 +675,20 @@ export default function DockerScreen() {
         return removeDockerRegistryMirror(key ?? "");
       throw new Error("不支持的 Docker 操作");
     },
+    onMutate: () => {
+      setLocalError("");
+      setLocalNotice("");
+    },
     onSuccess: async () => {
       setEditor(undefined);
       setLocalError("");
       await queryClient.invalidateQueries({ queryKey: ["docker"] });
+      setLocalNotice("操作已完成，数据已刷新");
     },
-    onError: (error) => setLocalError(error.message),
+    onError: (error) => {
+      setLocalNotice("");
+      setLocalError(error.message);
+    },
   });
 
   const active =
@@ -707,6 +765,36 @@ export default function DockerScreen() {
       setView("logs");
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "读取日志失败");
+    }
+  }
+  async function composeLogs(name: string) {
+    try {
+      setLocalError("");
+      setLocalNotice("");
+      setOutput(await getDockerComposeLogs(name, { tail: 200 }));
+      setView("logs");
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "读取 Compose 日志失败");
+    }
+  }
+  async function editComposeConfig(projectPath: string) {
+    try {
+      setLocalError("");
+      setLocalNotice("");
+      const result = await readDockerComposeConfig(projectPath);
+      const content = composeConfigText(result);
+      if (!content) throw new Error("接口未返回 Compose 配置内容");
+      setEditor({
+        type: "compose-config",
+        title: "编辑 Compose 配置",
+        key: projectPath,
+        value: {
+          project_path: projectPath,
+          content,
+        },
+      });
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "读取 Compose 配置失败");
     }
   }
   async function editContainer(key: string) {
@@ -794,10 +882,17 @@ export default function DockerScreen() {
         ))}
       </View>
       {localError ? <ErrorState message={localError} /> : null}
+      {localNotice ? <View style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.successBg, justifyContent: "center" }}><Text style={{ color: colors.success, fontSize: 12, fontWeight: "700" }}>{localNotice}</Text></View> : null}
       {active.error ? (
         <ErrorState
           message={active.error.message}
           retry={() => active.refetch()}
+        />
+      ) : null}
+      {containerStats.error && (view === "overview" || view === "containers") ? (
+        <ErrorState
+          message={`容器实时统计：${containerStats.error.message}`}
+          retry={() => containerStats.refetch()}
         />
       ) : null}
       {[
@@ -986,6 +1081,7 @@ export default function DockerScreen() {
                   <View
                     style={{
                       flexDirection: "row",
+                      flexWrap: "wrap",
                       alignItems: "center",
                       gap: 10,
                     }}
@@ -1109,18 +1205,22 @@ export default function DockerScreen() {
                       icon={Play}
                       label="启动"
                       color={colors.success}
+                      disabled={mutation.isPending}
+                      fluid
                       onPress={() =>
-                        mutation.mutate({ type: "compose-up", value: payload })
+                        mutation.mutate({ type: "compose-start", value: payload })
                       }
                     />
                     <IconButton
                       icon={CircleStop}
                       label="停止"
                       color={colors.danger}
+                      disabled={mutation.isPending}
+                      fluid
                       onPress={() =>
                         danger("确认停止", `停止 Compose 项目 ${name}？`, () =>
                           mutation.mutate({
-                            type: "compose-down",
+                            type: "compose-stop",
                             value: payload,
                           }),
                         )
@@ -1130,6 +1230,8 @@ export default function DockerScreen() {
                       icon={RotateCw}
                       label="重启"
                       color={colors.primary}
+                      disabled={mutation.isPending}
+                      fluid
                       onPress={() =>
                         mutation.mutate({
                           type: "compose-restart",
@@ -1141,21 +1243,19 @@ export default function DockerScreen() {
                       icon={FileText}
                       label="日志"
                       color={colors.cyan}
-                      onPress={async () => {
-                        setOutput(await getDockerComposeLogs(name, { tail: 200 }));
-                        setView("logs");
-                      }}
+                      disabled={mutation.isPending}
+                      fluid
+                      onPress={() => void composeLogs(name)}
                     />
                     <IconButton
                       icon={Save}
                       label="备份"
                       color={colors.warning}
+                      disabled={mutation.isPending}
+                      fluid
                       onPress={() =>
                         danger("确认备份", `备份 Compose 项目 ${name}？`, () =>
-                          backupDockerCompose(
-                            payload.project_path,
-                            payload.project_name,
-                          ),
+                          mutation.mutate({ type: "compose-backup", value: payload }),
                         )
                       }
                     />
@@ -1163,22 +1263,9 @@ export default function DockerScreen() {
                       icon={Pencil}
                       label="编辑配置"
                       color={colors.primary}
-                      onPress={async () => {
-                        const result = await readDockerComposeConfig(
-                          payload.project_path,
-                        );
-                        setEditor({
-                          type: "compose-config",
-                          title: "编辑 Compose 配置",
-                          key: payload.project_path,
-                          value: {
-                            project_path: payload.project_path,
-                            content: String(
-                              result.content ?? result.data ?? "",
-                            ),
-                          },
-                        });
-                      }}
+                      disabled={mutation.isPending}
+                      fluid
+                      onPress={() => void editComposeConfig(payload.project_path)}
                     />
                   </View>
                 </Panel>
@@ -1223,6 +1310,7 @@ export default function DockerScreen() {
                 <View
                   style={{
                     flexDirection: "row",
+                    flexWrap: "wrap",
                     alignItems: "center",
                     gap: 10,
                   }}
@@ -1291,6 +1379,7 @@ export default function DockerScreen() {
                 <View
                   style={{
                     flexDirection: "row",
+                    flexWrap: "wrap",
                     alignItems: "center",
                     gap: 10,
                   }}
@@ -1383,7 +1472,7 @@ export default function DockerScreen() {
             return (
               <Panel key={key}>
                 <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 9 }}
+                  style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 9 }}
                 >
                   <Activity color={colors.primary} size={18} />
                   <View style={{ flex: 1 }}>
@@ -1638,12 +1727,13 @@ export default function DockerScreen() {
               return;
             }
             if (editor.type === "compose-config") {
-              await updateDockerComposeConfig(
-                String(value.project_path ?? editor.key ?? ""),
-                String(value.content ?? ""),
-              );
-              setEditor(undefined);
-              await queryClient.invalidateQueries({ queryKey: ["docker"] });
+              mutation.mutate({
+                type: "compose-config-save",
+                value: {
+                  ...value,
+                  project_path: String(value.project_path ?? editor.key ?? ""),
+                },
+              });
               return;
             }
             if (editor.type === "mirror-remove") {

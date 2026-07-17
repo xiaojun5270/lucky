@@ -80,8 +80,9 @@ export default function DashboardScreen() {
     queryKey: ['docker', 'container-stats'],
     queryFn: getAllDockerContainerStats,
     enabled: dockerActive && (Boolean(dockerOverview.data) || dockerOverview.isError),
-    staleTime: 8_000,
-    refetchInterval: dockerActive ? 10_000 : false,
+    staleTime: 3_000,
+    refetchOnMount: 'always',
+    refetchInterval: dockerActive ? 5_000 : false,
     refetchIntervalInBackground: false,
   });
   const memoryPercent = percent(live.data?.usedMem ?? 0, live.data?.totalMem ?? 0);
@@ -121,6 +122,7 @@ export default function DashboardScreen() {
     {modulesQuery.error ? <ErrorState message={modulesQuery.error.message} retry={() => modulesQuery.refetch()} /> : null}
     {live.error && !live.data ? <ErrorState message={live.error} /> : null}
     {dockerOverview.error ? <ErrorState message={`Docker 总览：${dockerOverview.error.message}`} retry={() => dockerOverview.refetch()} /> : null}
+    {dockerStats.error ? <ErrorState message={`容器实时统计：${dockerStats.error.message}`} retry={() => dockerStats.refetch()} /> : null}
     <DockerOverviewDashboard
       data={dockerOverview.data}
       active={dockerActive}
