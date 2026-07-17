@@ -220,17 +220,31 @@ function lines(payload?: LuckyRecord) {
         .split("\n")
         .filter(Boolean);
 }
+function pickComposeField(item: LuckyRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  return "";
+}
 function composePayload(item: LuckyRecord) {
   return {
-    project_name: pick(item, ["Name", "name", "ProjectName", "projectName", "project_name"]),
-    project_path: pick(item, [
-      "Path",
+    project_name: pickComposeField(item, [
+      "name",
+      "Name",
+      "project_name",
+      "projectName",
+      "ProjectName",
+    ]),
+    project_path: pickComposeField(item, [
       "path",
-      "ProjectPath",
-      "projectPath",
+      "Path",
       "project_path",
-      "WorkingDir",
+      "projectPath",
+      "ProjectPath",
       "working_dir",
+      "WorkingDir",
     ]),
   };
 }
@@ -1173,9 +1187,11 @@ export default function DockerScreen() {
           </Pressable>
           {filtered.length ? (
             filtered.map((item, index) => {
-              const key = keyOf(item, index);
-              const name = pick(item, ["Name", "ProjectName", "name"], key);
               const payload = composePayload(item);
+              const key = [payload.project_name, payload.project_path]
+                .filter(Boolean)
+                .join(":") || keyOf(item, index);
+              const name = payload.project_name || key;
               return (
                 <Panel key={key}>
                   <View
