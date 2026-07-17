@@ -18,10 +18,10 @@ export function FullScreenSafeArea({ style, ...props }: ComponentProps<typeof Vi
 function surfaceShadow(platform: typeof Platform.OS) {
   return {
     shadowColor: '#000000',
-    shadowOpacity: platform === 'ios' || platform === 'web' ? 0.045 : 0,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: platform === 'android' ? 1 : 0,
+    shadowOpacity: platform === 'ios' || platform === 'web' ? 0.055 : 0,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: platform === 'android' ? 2 : 0,
   } as const;
 }
 
@@ -29,9 +29,9 @@ export function Page({ title, subtitle, icon: Icon, children, refreshing, onRefr
   const colors = useAppTheme();
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }} edges={safeTop ? ['top'] : []}>
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" removeClippedSubviews={Platform.OS === 'android'} contentContainerStyle={{ width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 110, gap: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>{Icon ? <IconTile icon={Icon} size={42} iconSize={21} /> : null}<View style={{ flex: 1, gap: 2 }}><Text style={{ color: colors.text, fontSize: 28, lineHeight: 34, fontWeight: '800' }}>{title}</Text>{subtitle ? <Text style={{ color: colors.subtext, fontSize: 13, lineHeight: 18 }}>{subtitle}</Text> : null}</View></View>
-        {onRefresh ? <Pressable accessibilityLabel="刷新" onPress={onRefresh} disabled={refreshing} style={({ pressed }) => ({ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS), opacity: pressed ? 0.55 : 1 })}>{refreshing ? <ActivityIndicator color={colors.primary} /> : <RefreshCw color={colors.primary} size={19} strokeWidth={2.2} />}</Pressable> : null}
+      <View style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>{Icon ? <IconTile icon={Icon} size={44} iconSize={22} /> : null}<View style={{ flex: 1, gap: 2 }}><Text style={{ color: colors.text, fontSize: 26, lineHeight: 32, fontWeight: '800' }}>{title}</Text>{subtitle ? <Text style={{ color: colors.subtext, fontSize: 13, lineHeight: 18 }}>{subtitle}</Text> : null}</View></View>
+        {onRefresh ? <Pressable accessibilityLabel="刷新" onPress={onRefresh} disabled={refreshing} style={({ pressed }) => ({ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS), opacity: refreshing ? 0.55 : pressed ? 0.62 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] })}>{refreshing ? <ActivityIndicator color={colors.primary} /> : <RefreshCw color={colors.primary} size={19} strokeWidth={2.2} />}</Pressable> : null}
       </View>
       {children}
     </ScrollView>
@@ -45,17 +45,18 @@ export function Panel({ children }: { children: ReactNode }) {
 
 export function IconTile({ icon: Icon, color, background, size = 36, iconSize = 18 }: { icon: LucideIcon; color?: string; background?: string; size?: number; iconSize?: number }) {
   const colors = useAppTheme();
-  return <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: background ?? colors.primarySoft }}><Icon color={color ?? colors.primary} size={iconSize} strokeWidth={2.2} /></View>;
+  return <View style={{ width: size, height: size, borderRadius: Math.max(9, Math.round(size * 0.28)), alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: background ?? colors.primarySoft }}><Icon color={color ?? colors.primary} size={iconSize} strokeWidth={2.2} /></View>;
 }
 
-export function EmptyState({ message, icon: Icon = Inbox }: { message: string; icon?: LucideIcon }) {
+export function EmptyState({ message, icon: Icon = Inbox, embedded = false }: { message: string; icon?: LucideIcon; embedded?: boolean }) {
   const colors = useAppTheme();
-  return <Panel><View style={{ alignItems: 'center', paddingVertical: 20, gap: 10 }}><IconTile icon={Icon} color={colors.subtext} background={colors.mutedCard} size={42} iconSize={21} /><Text style={{ color: colors.subtext, textAlign: 'center' }}>{message}</Text></View></Panel>;
+  const content = <View style={{ alignItems: 'center', paddingVertical: 20, gap: 10 }}><IconTile icon={Icon} color={colors.subtext} background={colors.mutedCard} size={42} iconSize={21} /><Text style={{ color: colors.subtext, textAlign: 'center' }}>{message}</Text></View>;
+  return embedded ? content : <Panel>{content}</Panel>;
 }
 
 export function ErrorState({ message, retry }: { message: string; retry?: () => void }) {
   const colors = useAppTheme();
-  return <View style={{ padding: 14, borderRadius: CARD_RADIUS, backgroundColor: colors.dangerBg, gap: 10 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><IconTile icon={TriangleAlert} color={colors.danger} background={colors.card} size={34} iconSize={17} /><Text style={{ flex: 1, color: colors.danger, lineHeight: 19 }}>{message}</Text></View>{retry ? <Pressable onPress={retry} style={{ alignSelf: 'flex-start', minHeight: 34, paddingHorizontal: 12, borderRadius: CONTROL_RADIUS, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.danger, fontWeight: '700' }}>重试</Text></Pressable> : null}</View>;
+  return <View style={{ padding: 14, borderRadius: CARD_RADIUS, borderWidth: 1, borderColor: colors.dangerBg, backgroundColor: colors.dangerBg, gap: 10 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><IconTile icon={TriangleAlert} color={colors.danger} background={colors.card} size={34} iconSize={17} /><Text style={{ flex: 1, color: colors.danger, lineHeight: 19 }}>{message}</Text></View>{retry ? <Pressable onPress={retry} style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 36, paddingHorizontal: 12, borderRadius: CONTROL_RADIUS, backgroundColor: colors.card, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}><RefreshCw color={colors.danger} size={14} /><Text style={{ color: colors.danger, fontWeight: '700' }}>重试</Text></Pressable> : null}</View>;
 }
 
 export function SectionHeader({ icon: Icon, title, meta }: { icon: LucideIcon; title: string; meta?: string }) {
@@ -70,13 +71,13 @@ export function SheetHandle() {
 
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {
   const colors = useAppTheme();
-  return <View style={{ height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.mutedCard, borderRadius: CONTROL_RADIUS, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 11 }}><Search color={colors.subtext} size={17} strokeWidth={2.1} /><TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.placeholder} autoCapitalize="none" autoCorrect={false} style={{ flex: 1, color: colors.text, paddingVertical: 10, fontSize: 15 }} /></View>;
+  return <View style={{ height: 46, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12 }}><Search color={colors.subtext} size={17} strokeWidth={2.1} /><TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.placeholder} autoCapitalize="none" autoCorrect={false} style={{ flex: 1, color: colors.text, paddingVertical: 10, fontSize: 15 }} /></View>;
 }
 
 export function ServiceButton({ icon: Icon, label, detail, onPress, iconColor, iconBackground }: { icon: LucideIcon; label: string; detail: string; onPress: () => void; iconColor?: string; iconBackground?: string }) {
   const colors = useAppTheme();
-  return <Pressable onPress={onPress} style={({ pressed }) => ({ flexGrow: 1, flexBasis: 150, minHeight: 128, padding: 15, gap: 10, borderRadius: CARD_RADIUS, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS), opacity: pressed ? 0.62 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}>
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><IconTile icon={Icon} color={iconColor} background={iconBackground} size={40} iconSize={20} /><View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mutedCard }}><ChevronRight color={colors.subtext} size={16} /></View></View>
-    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{label}</Text><Text numberOfLines={2} style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>{detail}</Text>
+  return <Pressable onPress={onPress} style={({ pressed }) => ({ flexGrow: 1, flexBasis: 150, minHeight: 124, padding: 15, gap: 10, borderRadius: CARD_RADIUS, backgroundColor: pressed ? colors.mutedCard : colors.card, borderWidth: 1, borderColor: colors.border, ...surfaceShadow(Platform.OS), opacity: pressed ? 0.72 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><IconTile icon={Icon} color={iconColor} background={iconBackground} size={42} iconSize={21} /><View style={{ width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mutedCard }}><ChevronRight color={colors.subtext} size={16} /></View></View>
+    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{label}</Text><Text numberOfLines={2} style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>{detail}</Text>
   </Pressable>;
 }

@@ -1507,41 +1507,37 @@ export default function WebServiceScreen() {
       refreshing={activeQuery.isFetching}
       onRefresh={() => activeQuery.refetch()}
     >
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {tabs.map(([key, label, Icon]) => (
-          <Pressable
-            key={key}
-            onPress={() => {
-              setView(key);
-              if (key === "logs") setOutput("");
-              setLocalError("");
-            }}
-            style={{
-              width: "31%",
-              minWidth: 92,
-              height: 42,
-              borderRadius: 8,
-              flexDirection: "row",
-              gap: 6,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: view === key ? colors.primary : colors.card,
-              borderWidth: 1,
-              borderColor: view === key ? colors.primary : colors.border,
-            }}
-          >
-            <Icon color={view === key ? "#fff" : colors.text} size={16} />
-            <Text
-              style={{
-                color: view === key ? "#fff" : colors.text,
-                fontSize: 12,
-                fontWeight: "700",
+      <View style={{ padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+          {tabs.map(([key, label, Icon]) => {
+            const selected = view === key;
+            return <Pressable
+              key={key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => {
+                setView(key);
+                if (key === "logs") setOutput("");
+                setLocalError("");
               }}
+              style={({ pressed }) => ({
+                minWidth: 78,
+                height: 44,
+                paddingHorizontal: 10,
+                borderRadius: 12,
+                flexDirection: "row",
+                gap: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: selected ? colors.card : "transparent",
+                opacity: pressed ? 0.62 : 1,
+              })}
             >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
+              <Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} />
+              <Text numberOfLines={1} style={{ color: selected ? colors.primary : colors.subtext, fontSize: 11, fontWeight: selected ? "700" : "600" }}>{label}</Text>
+            </Pressable>;
+          })}
+        </ScrollView>
       </View>
       {localError ? <ErrorState message={localError} /> : null}
       {activeQuery.error ? (
@@ -1567,8 +1563,8 @@ export default function WebServiceScreen() {
               })
             }
             style={{
-              height: 44,
-              borderRadius: 8,
+              height: 46,
+              borderRadius: 12,
               backgroundColor: colors.primary,
               alignItems: "center",
               justifyContent: "center",

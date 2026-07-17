@@ -1,8 +1,10 @@
 import {
   Container,
+  Cpu,
   Database,
   Gauge,
   Image,
+  MemoryStick,
   Network,
   Workflow,
 } from "lucide-react-native";
@@ -10,7 +12,7 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
-import { Panel, SectionHeader } from "@/src/components/lucky-ui";
+import { IconTile, Panel, SectionHeader } from "@/src/components/lucky-ui";
 import { useLuckyStatus } from "@/src/hooks/use-lucky-status";
 import { useAppTheme } from "@/src/lib/theme";
 import { getDockerOverview } from "@/src/services/docker";
@@ -662,6 +664,8 @@ function DockerGauge({ label, value, color, digits = 1 }: { label: string; value
 }
 
 function DockerResourceCard({
+  icon: Icon,
+  iconBackground,
   title,
   color,
   primaryLabel,
@@ -671,6 +675,8 @@ function DockerResourceCard({
   gaugeValue,
   digits,
 }: {
+  icon: typeof Cpu;
+  iconBackground: string;
   title: string;
   color: string;
   primaryLabel: string;
@@ -686,7 +692,7 @@ function DockerResourceCard({
       <View style={{ minHeight: 116, flexDirection: "row", alignItems: "center", gap: 14 }}>
         <View style={{ flex: 1, minWidth: 0, gap: 13 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+            <IconTile icon={Icon} color={color} background={iconBackground} size={32} iconSize={16} />
             <Text style={{ color: colors.text, fontSize: 15, fontWeight: "800" }}>{title}</Text>
           </View>
           <View style={{ gap: 8 }}>
@@ -736,6 +742,8 @@ function DockerLiveResourceCards({
 
   return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
     <DockerResourceCard
+      icon={Cpu}
+      iconBackground={colors.primarySoft}
       title="CPU"
       color={colors.primary}
       primaryLabel="逻辑核心"
@@ -746,6 +754,8 @@ function DockerLiveResourceCards({
       digits={2}
     />
     <DockerResourceCard
+      icon={MemoryStick}
+      iconBackground={colors.successBg}
       title="内存"
       color={colors.success}
       primaryLabel="总可用内存"
@@ -791,14 +801,21 @@ function DockerSummaryItem({
       flexShrink: width === undefined ? 1 : 0,
       flexBasis: width ?? 132,
       minWidth: width ?? 132,
-      minHeight: 64,
-      padding: 8,
-      borderRadius: 10,
+      minHeight: 72,
+      padding: 10,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
       backgroundColor: pressed ? colors.mutedCard : colors.card,
       opacity: pressed ? 0.72 : 1,
+      shadowColor: colors.shadow,
+      shadowOpacity: colors.mode === "dark" ? 0 : 0.04,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 1,
     })}
   >
     <View style={{ width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: background }}>
@@ -809,8 +826,8 @@ function DockerSummaryItem({
         <Text numberOfLines={1} style={{ color: valueColor ?? colors.text, fontSize: 17, fontWeight: "800" }}>{value}</Text>
         {suffix ? <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 12, fontWeight: "700" }}>{suffix}</Text> : null}
       </View>
-      <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10 }}>{label}</Text>
-      {badge ? <View style={{ alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, backgroundColor: colors.mutedCard }}><Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 9, fontWeight: "700" }}>{badge}</Text></View> : null}
+      <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 11 }}>{label}</Text>
+      {badge ? <View style={{ alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 7, backgroundColor: colors.mutedCard }}><Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10, fontWeight: "700" }}>{badge}</Text></View> : null}
     </View>
   </Pressable>;
 }
@@ -844,7 +861,7 @@ function DockerRankingCard({
   return <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 360, minWidth: 260 }}>
     <Panel>
       <View style={{ minHeight: 28, flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View style={{ width: 6, height: 20, borderRadius: 3, backgroundColor: color }} />
+        <IconTile icon={mode === "cpu" ? Cpu : MemoryStick} color={color} background={mode === "cpu" ? colors.primarySoft : colors.successBg} size={32} iconSize={16} />
         <Text style={{ flex: 1, color: colors.text, fontSize: 14, fontWeight: "800" }}>{title}</Text>
       </View>
       {rows.length ? <View style={{ gap: 0 }}>
@@ -877,7 +894,7 @@ function DockerRankingCard({
           accessibilityLabel={`查看容器 ${row.name}`}
           onPress={() => onSelectContainer(row.name)}
           style={({ pressed }) => ({
-            minHeight: 44,
+            minHeight: 48,
             paddingVertical: 6,
             borderTopWidth: 1,
             borderTopColor: colors.rowBorder,
@@ -888,11 +905,11 @@ function DockerRankingCard({
           })}
         >
           <Text style={{ width: 18, color: index === 0 ? colors.danger : index === 1 ? colors.warning : colors.subtext, fontSize: 11, fontWeight: "800", textAlign: "center" }}>{index + 1}</Text>
-          <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.primary, fontSize: 11, fontWeight: "700" }}>{row.name}</Text>
+          <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.primary, fontSize: 12, fontWeight: "700" }}>{row.name}</Text>
           <View style={{ flexBasis: 70, flexShrink: 1, minWidth: 36, maxWidth: 90, height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: "hidden" }}>
             <View style={{ width: `${Math.max(0, Math.min(100, bar))}%` as `${number}%`, height: 6, borderRadius: 3, backgroundColor: barColor }} />
           </View>
-          <Text numberOfLines={1} style={{ minWidth: 62, color: colors.subtext, fontSize: 10, fontWeight: "700", textAlign: "right" }}>
+          <Text numberOfLines={1} style={{ minWidth: 62, color: colors.subtext, fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"], textAlign: "right" }}>
             {mode === "cpu" ? formatPercent(metric, 1) : metric > 0 ? bytes(metric) : "0 B"}
           </Text>
         </Pressable>;
@@ -916,6 +933,7 @@ export function DockerOverviewDashboard({
   stats,
   statsLoading,
   statsError,
+  showHeader = true,
   showContainerInsights = true,
   onSelectView,
   onSelectContainer,
@@ -926,6 +944,7 @@ export function DockerOverviewDashboard({
   stats?: LuckyRecord;
   statsLoading: boolean;
   statsError?: string;
+  showHeader?: boolean;
   showContainerInsights?: boolean;
   onSelectView: (view: DockerOverviewTarget) => void;
   onSelectContainer: (name: string) => void;
@@ -969,24 +988,24 @@ export function DockerOverviewDashboard({
       : "暂无容器统计数据";
   const summaryColumns = summaryWidth >= 700 ? 5 : summaryWidth >= 264 ? 2 : 1;
   const summaryItemWidth = summaryWidth
-    ? Math.floor((summaryWidth - (summaryColumns - 1) * 6) / summaryColumns)
+    ? Math.floor((summaryWidth - (summaryColumns - 1) * 8) / summaryColumns)
     : undefined;
 
   return <>
-    <SectionHeader icon={Gauge} title="Docker 总览" />
+    {showHeader ? <SectionHeader icon={Gauge} title="Docker 总览" /> : null}
     <DockerLiveResourceCards
       info={data?.info ?? emptyDockerInfo}
       active={active}
       liveStatus={liveStatus}
     />
 
-    <View style={{ padding: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+    <View>
       <View
         onLayout={(event) => {
           const nextWidth = Math.floor(event.nativeEvent.layout.width);
           if (nextWidth !== summaryWidth) setSummaryWidth(nextWidth);
         }}
-        style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
       >
         <DockerSummaryItem width={summaryItemWidth} icon={Workflow} color={colors.subtext} background={colors.mutedCard} value={count(data?.composeCount)} label="Compose" onPress={() => onSelectView("compose")} />
         <DockerSummaryItem width={summaryItemWidth} icon={Container} color={colors.primary} background={colors.primarySoft} valueColor={colors.success} value={statusValue(states.running)} suffix={data?.containerCount === undefined ? undefined : ` / ${data.containerCount}`} label="容器" onPress={() => onSelectView("containers")} />

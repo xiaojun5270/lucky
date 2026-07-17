@@ -448,8 +448,11 @@ export default function ServiceDetailScreen() {
   }
 
   return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} safeTop={false} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      {([['list', '列表', List], ['logs', '日志', FileText]] as const).map(([value, label, Icon]) => <Pressable key={value} onPress={() => { setView(value); if (value === 'logs') setLogKey(undefined); }} style={{ flex: 1, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, backgroundColor: view === value ? colors.primary : colors.card, borderWidth: 1, borderColor: view === value ? colors.primary : colors.border }}><Icon color={view === value ? '#fff' : colors.text} size={16} /><Text style={{ color: view === value ? '#fff' : colors.text, fontWeight: '700' }}>{label}</Text></Pressable>)}
+    <View style={{ padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: 'row', gap: 4 }}>
+      {([['list', '列表', List], ['logs', '日志', FileText]] as const).map(([value, label, Icon]) => {
+        const selected = view === value;
+        return <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setView(value); if (value === 'logs') setLogKey(undefined); }} style={({ pressed }) => ({ flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, backgroundColor: selected ? colors.card : 'transparent', opacity: pressed ? 0.62 : 1 })}><Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} /><Text style={{ color: selected ? colors.primary : colors.subtext, fontWeight: '700' }}>{label}</Text></Pressable>;
+      })}
     </View>
     {mutation.error ? <ErrorState message={mutation.error.message} /> : null}
     {ddnsMutation.error ? <ErrorState message={ddnsMutation.error.message} /> : null}
@@ -462,12 +465,12 @@ export default function ServiceDetailScreen() {
     </> : <>
       {query.error ? <ErrorState message={query.error.message} retry={() => query.refetch()} /> : null}
       {kind === 'ddns' ? <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Pressable onPress={() => setDdnsEditor({ type: 'item', title: '添加 DDNS 任务', value: { TaskName: '', Enable: true, Records: [] } })} style={{ flex: 1, height: 42, borderRadius: 8, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加任务</Text></Pressable>
-        <Pressable onPress={editDdnsConfigure} style={{ flex: 1, height: 42, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
+        <Pressable onPress={() => setDdnsEditor({ type: 'item', title: '添加 DDNS 任务', value: { TaskName: '', Enable: true, Records: [] } })} style={{ flex: 1, height: 46, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加任务</Text></Pressable>
+        <Pressable onPress={editDdnsConfigure} style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
       </View> : null}
       {kind === 'ssl' ? <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Pressable onPress={() => setSslAddOpen(true)} style={{ flex: 1, height: 42, borderRadius: 8, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加证书</Text></Pressable>
-        <Pressable onPress={editSslSetting} style={{ flex: 1, height: 42, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
+        <Pressable onPress={() => setSslAddOpen(true)} style={{ flex: 1, height: 46, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加证书</Text></Pressable>
+        <Pressable onPress={editSslSetting} style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
       </View> : null}
       {query.data?.items.length ? query.data.items.map((item, index) => {
         const key = itemKey(item, index);

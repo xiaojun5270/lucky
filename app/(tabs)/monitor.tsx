@@ -1,16 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useIsFocused, useRouter } from 'expo-router';
-import { Boxes, Cpu, Download, Gauge, HardDrive, Network, Upload } from 'lucide-react-native';
+import { Cpu, Download, Gauge, HardDrive, Network, Upload } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
 import Svg, { Line, Polyline } from 'react-native-svg';
 
 import { DockerOverviewDashboard, type DockerOverviewTarget } from '@/src/components/docker-overview';
-import { EmptyState, ErrorState, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
+import { ErrorState, Page, Panel, SectionHeader } from '@/src/components/lucky-ui';
 import { useLuckyStatus } from '@/src/hooks/use-lucky-status';
 import { useAppTheme } from '@/src/lib/theme';
 import { getDockerOverview } from '@/src/services/docker';
-import { getLuckyModules } from '@/src/services/lucky';
 import type { LuckyStatusSample } from '@/src/types/lucky';
 
 function bytes(value: number, speed = false) {
@@ -60,13 +59,6 @@ export default function DashboardScreen() {
   );
   const [refreshing, setRefreshing] = useState(false);
   const dockerActive = isFocused && appIsActive;
-  const modulesQuery = useQuery({
-    queryKey: ['lucky', 'modules'],
-    queryFn: getLuckyModules,
-    enabled: dockerActive,
-    refetchInterval: dockerActive ? 30_000 : false,
-    refetchIntervalInBackground: false,
-  });
   const live = useLuckyStatus(dockerActive);
   const dockerOverview = useQuery({
     queryKey: ['docker', 'overview'],
@@ -98,18 +90,14 @@ export default function DashboardScreen() {
     setRefreshing(true);
     void (async () => {
       try {
-        await Promise.all([
-          modulesQuery.refetch(),
-          dockerOverview.refetch(),
-        ]);
+        await dockerOverview.refetch();
       } finally {
         setRefreshing(false);
       }
     })();
   };
 
-  return <Page title="总览" subtitle="Lucky 与 Docker 运行状态" icon={Gauge} refreshing={refreshing || (!modulesQuery.data && modulesQuery.isFetching) || (!dockerOverview.data && dockerOverview.isFetching)} onRefresh={refresh}>
-    {modulesQuery.error ? <ErrorState message={modulesQuery.error.message} retry={() => modulesQuery.refetch()} /> : null}
+  return <Page title="总览" subtitle="资源用量与 Docker 状态" icon={Gauge} refreshing={refreshing || (!dockerOverview.data && dockerOverview.isFetching)} onRefresh={refresh}>
     {live.error && !live.data ? <ErrorState message={live.error} /> : null}
     {dockerOverview.error ? <ErrorState message={`Docker 总览：${dockerOverview.error.message}`} retry={() => dockerOverview.refetch()} /> : null}
     <DockerOverviewDashboard
@@ -117,6 +105,7 @@ export default function DashboardScreen() {
       active={dockerActive}
       liveStatus={live}
       statsLoading={false}
+      showHeader={false}
       showContainerInsights={false}
       onSelectView={(view) => openDocker(view)}
       onSelectContainer={(name) => openDocker('containers', name)}
@@ -137,8 +126,5 @@ export default function DashboardScreen() {
       <Panel><SectionHeader icon={HardDrive} title="服务器信息" /><InfoRow label="进程启动时间" value={live.data.runTime || '--'} /><InfoRow label="查询时间" value={live.data.queryTime || '--'} /><InfoRow label="进程已打开句柄数" value={String(live.data.handleCount)} /><InfoRow label="协程数" value={String(live.data.goroutine)} /><InfoRow label="进程占用内存" value={bytes(live.data.processUsedMem)} /><View style={{ height: 1, backgroundColor: colors.rowBorder }} /><InfoRow label="GC 总次数" value={String(live.data.numGc)} /><InfoRow label="堆占用内存" value={bytes(live.data.heapInuse)} /></Panel>
     </> : null}
 
-    <Panel><SectionHeader icon={Boxes} title="模块状态" meta={modulesQuery.data?.length ? `${modulesQuery.data.length} 项` : undefined} />
-      {modulesQuery.isLoading ? <Text style={{ color: colors.subtext }}>正在加载...</Text> : modulesQuery.data?.length ? modulesQuery.data.map((module, index) => { const name = String(module.Name ?? module.name ?? module.Module ?? module.module ?? `模块 ${index + 1}`); const enabled = module.Enable ?? module.enable; return <View key={String(module.Key ?? module.key ?? index)} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingVertical: 9, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}><View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: enabled === false ? colors.mutedCard : colors.successBg }}><Network color={enabled === false ? colors.disabled : colors.success} size={15} /></View><Text style={{ flex: 1, marginLeft: 10, color: colors.text, fontWeight: '600' }}>{name}</Text><View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: enabled === false ? colors.disabled : colors.success }} /><Text style={{ color: enabled === false ? colors.subtext : colors.success, fontSize: 11 }}>{enabled === false ? '已停用' : '运行中'}</Text></View></View>; }) : <EmptyState message="接口未返回模块列表" icon={Boxes} />}
-    </Panel>
   </Page>;
 }

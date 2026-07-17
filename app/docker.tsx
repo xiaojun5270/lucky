@@ -6,11 +6,17 @@ import {
   Box,
   CircleStop,
   Container,
+  Cpu,
   Database,
+  Download,
+  Ellipsis,
   FileText,
   Folder,
   Gauge,
+  HardDriveDownload,
+  HardDriveUpload,
   Image,
+  MemoryStick,
   Network,
   Pause,
   Pencil,
@@ -22,6 +28,7 @@ import {
   Settings2,
   ShieldAlert,
   Trash2,
+  Upload,
   UploadCloud,
   Workflow,
   Wrench,
@@ -249,6 +256,16 @@ function composePayload(item: LuckyRecord) {
   };
 }
 
+function composeProjectError(error: unknown, projectPath: string) {
+  const message = error instanceof Error ? error.message : String(error || "Compose 操作失败");
+  if (/目录不存在|directory\s+(?:does not exist|not found)|no such (?:file|directory)/i.test(message)) {
+    return new Error(
+      `Lucky 服务无法访问项目目录：${projectPath}。请将宿主机 Compose 目录按相同绝对路径读写挂载到 Lucky 容器。`,
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 function containerIcon(item: LuckyRecord, icons: LuckyRecord[]) {
   const labels = item.Labels && typeof item.Labels === "object" && !Array.isArray(item.Labels)
     ? item.Labels as LuckyRecord
@@ -293,12 +310,12 @@ function ContainerArtwork({ item, icons, running, size = 44 }: { item: LuckyReco
     : `${luckySessionState.baseUrl.replace(/\/$/, "")}/api/iconlib/icon?path=${encodeURIComponent(icon)}`;
   useEffect(() => setFailed(false), [uri]);
   if (!uri || failed) return (
-    <View style={{ width: size, height: size, borderRadius: 8, backgroundColor: running ? "#7c3aed" : colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
-      <Container color={running ? "#ffffff" : colors.disabled} size={Math.round(size * 0.45)} />
+    <View style={{ width: size, height: size, borderRadius: Math.max(10, Math.round(size * 0.26)), backgroundColor: running ? colors.primarySoft : colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+      <Container color={running ? colors.primary : colors.disabled} size={Math.round(size * 0.45)} />
     </View>
   );
   return (
-    <View style={{ width: size, height: size, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+    <View style={{ width: size, height: size, borderRadius: Math.max(10, Math.round(size * 0.26)), backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       <ExpoImage
         source={{ uri, headers: external || !luckySessionState.token ? undefined : { "Lucky-Admin-Token": luckySessionState.token } }}
         onError={() => setFailed(true)}
@@ -325,28 +342,28 @@ function ContainerStatsGrid({ stats }: { stats?: DockerStatRow }) {
     : stats?.hasMemory
       ? compactDockerBytes(stats.memory, true)
       : "-";
-  const rows = [
-    [`CPU:${cpu}`, `内存:${memory}`],
+  const groups = [
     [
-      `↓ ${compactDockerBytes(stats?.networkRx ?? 0, stats?.hasNetworkRx === true)}`,
-      `↑ ${compactDockerBytes(stats?.networkTx ?? 0, stats?.hasNetworkTx === true)}`,
+      { label: "CPU", value: cpu, icon: Cpu, color: colors.primary },
+      { label: "内存", value: memory, icon: MemoryStick, color: colors.success },
     ],
     [
-      `R ${compactDockerBytes(stats?.blockRead ?? 0, stats?.hasBlockRead === true)}`,
-      `W ${compactDockerBytes(stats?.blockWrite ?? 0, stats?.hasBlockWrite === true)}`,
+      { label: "下载", value: compactDockerBytes(stats?.networkRx ?? 0, stats?.hasNetworkRx === true), icon: Download, color: colors.cyan },
+      { label: "上传", value: compactDockerBytes(stats?.networkTx ?? 0, stats?.hasNetworkTx === true), icon: Upload, color: colors.warning },
+    ],
+    [
+      { label: "读取", value: compactDockerBytes(stats?.blockRead ?? 0, stats?.hasBlockRead === true), icon: HardDriveDownload, color: colors.subtext },
+      { label: "写入", value: compactDockerBytes(stats?.blockWrite ?? 0, stats?.hasBlockWrite === true), icon: HardDriveUpload, color: colors.subtext },
     ],
   ];
-  return <View style={{ flexShrink: 1, flexBasis: 162, minWidth: 160, maxWidth: 164, marginLeft: "auto", gap: 3 }}>
-    {rows.map((row, rowIndex) => <View key={rowIndex} style={{ height: 22, borderRadius: 5, backgroundColor: colors.mutedCard, overflow: "hidden", flexDirection: "row", alignItems: "center" }}>
-      {row.map((value, index) => <View key={index} style={{ flex: 1, minWidth: 0, height: 22, paddingHorizontal: 4, borderLeftWidth: index ? 1 : 0, borderLeftColor: colors.rowBorder, alignItems: "center", justifyContent: "center" }}>
-        <Text
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-          numberOfLines={1}
-          style={{ width: "100%", color: colors.subtext, fontSize: 9, lineHeight: 12, fontWeight: "600", fontVariant: ["tabular-nums"], textAlign: "center" }}
-        >
-          {value}
-        </Text>
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+    {groups.map((group) => <View key={group[0].label} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 145, minWidth: 132, minHeight: 54, padding: 8, borderRadius: 12, backgroundColor: colors.mutedCard, flexDirection: "row", alignItems: "center" }}>
+      {group.map(({ label, value, icon: MetricIcon, color }, index) => <View key={label} style={{ flex: 1, minWidth: 0, paddingHorizontal: 4, borderLeftWidth: index ? 1 : 0, borderLeftColor: colors.rowBorder, gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }}>
+          <MetricIcon color={color} size={12} strokeWidth={2.2} />
+          <Text style={{ color: colors.subtext, fontSize: 10, lineHeight: 12, fontWeight: "600" }}>{label}</Text>
+        </View>
+        <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} style={{ width: "100%", color: colors.text, fontSize: 11, lineHeight: 14, fontWeight: "700", fontVariant: ["tabular-nums"], textAlign: "center" }}>{value}</Text>
       </View>)}
     </View>)}
   </View>;
@@ -379,9 +396,11 @@ function IconButton({
         flexShrink: fluid ? 1 : 0,
         flexBasis: fluid ? 88 : "auto",
         minWidth: 64,
-        minHeight: 36,
-        paddingHorizontal: 8,
-        borderRadius: 8,
+        minHeight: 42,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
         backgroundColor: colors.mutedCard,
         alignItems: "center",
         justifyContent: "center",
@@ -403,16 +422,17 @@ function ContainerCommandButton({ icon: Icon, label, color, onPress }: { icon: t
     style={({ pressed }) => ({
       flex: 1,
       minWidth: 0,
-      height: 36,
-      borderRadius: 8,
+      minHeight: 42,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.card,
+      backgroundColor: colors.mutedCard,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 5,
       opacity: pressed ? 0.55 : 1,
+      transform: [{ scale: pressed ? 0.985 : 1 }],
     })}
   ><Icon color={color} size={15} /><Text numberOfLines={1} style={{ color, fontSize: 12, fontWeight: "700" }}>{label}</Text></Pressable>;
 }
@@ -643,28 +663,47 @@ export default function DockerScreen() {
         const projectPath = String(value?.project_path ?? "").trim();
         const content = String(value?.content ?? "");
         if (!projectPath || !content.trim()) throw new Error("Compose 配置路径或内容为空");
-        return updateDockerComposeConfig(
-          projectPath,
-          content,
-        );
+        try {
+          return await updateDockerComposeConfig(projectPath, content);
+        } catch (error) {
+          throw composeProjectError(error, projectPath);
+        }
       }
       if (type === "compose-backup") {
         const projectPath = String(value?.project_path ?? "").trim();
         const projectName = String(value?.project_name ?? "").trim();
         if (!projectPath || !projectName) throw new Error("Compose 项目名称或路径缺失");
-        return backupDockerCompose(
-          projectPath,
-          projectName,
-        );
+        const configResult = await getDockerConfig();
+        const dockerConfig = nested(configResult, ["config", "data", "result"]);
+        const backupPath = pickComposeField(dockerConfig, ["compose_backup_path"]);
+        if (!backupPath) {
+          throw new Error("请先在 Docker 设置中配置 Compose 备份路径");
+        }
+        try {
+          await readDockerComposeConfig(projectPath);
+          return await backupDockerCompose(projectPath, projectName);
+        } catch (error) {
+          const projectError = composeProjectError(error, projectPath);
+          if (projectError === error && /^invalid request:?\s*$/i.test(projectError.message)) {
+            throw new Error(
+              `Compose 备份请求被服务端拒绝，请确认备份目录 ${backupPath} 已存在且 Lucky 具有写入权限。`,
+            );
+          }
+          throw projectError;
+        }
       }
       if (type.startsWith("compose-")) {
         const projectPath = String(value?.project_path ?? "").trim();
         const projectName = String(value?.project_name ?? "").trim();
         if (!projectPath || !projectName) throw new Error("Compose 项目名称或路径缺失");
-        return runDockerComposeAction(
-          type.replace("compose-", "") as "up" | "down" | "start" | "stop" | "restart",
-          { ...value, project_path: projectPath, project_name: projectName },
-        );
+        try {
+          return await runDockerComposeAction(
+            type.replace("compose-", "") as "up" | "down" | "start" | "stop" | "restart",
+            { ...value, project_path: projectPath, project_name: projectName },
+          );
+        } catch (error) {
+          throw composeProjectError(error, projectPath);
+        }
       }
       if (type === "network-create") return createDockerNetwork(value ?? {});
       if (type === "network-remove") return removeDockerNetwork(key ?? "");
@@ -808,7 +847,7 @@ export default function DockerScreen() {
         },
       });
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "读取 Compose 配置失败");
+      setLocalError(composeProjectError(error, projectPath).message);
     }
   }
   async function editContainer(key: string) {
@@ -859,41 +898,42 @@ export default function DockerScreen() {
         }
       }}
     >
-      <View style={{ width: "100%", maxWidth: 820, alignSelf: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {tabs.map(([key, label, Icon]) => (
-          <Pressable
-            key={key}
-            onPress={() => {
-              setView(key);
-              setSearch("");
-              setOutput("");
-            }}
-            style={{
-              width: "31%",
-              minWidth: 92,
-              height: 42,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: view === key ? colors.primary : colors.border,
-              backgroundColor: view === key ? colors.primary : colors.card,
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "row",
-              gap: 6,
-            }}
-          >
-            <Icon color={view === key ? "#fff" : colors.text} size={16} />
-            <Text
-              style={{
-                color: view === key ? "#fff" : colors.text,
-                fontSize: 12,
-                fontWeight: "700",
+      <View style={{ width: "100%", maxWidth: 820, alignSelf: "center", padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+          {tabs.map(([key, label, Icon]) => {
+            const selected = view === key;
+            return <Pressable
+              key={key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => {
+                setView(key);
+                setSearch("");
+                setOutput("");
               }}
+              style={({ pressed }) => ({
+                minWidth: 78,
+                height: 44,
+                paddingHorizontal: 10,
+                borderRadius: 12,
+                backgroundColor: selected ? colors.card : "transparent",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 6,
+                shadowColor: colors.shadow,
+                shadowOpacity: selected && (Platform.OS === "ios" || Platform.OS === "web") ? 0.06 : 0,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: selected && Platform.OS === "android" ? 1 : 0,
+                opacity: pressed ? 0.62 : 1,
+              })}
             >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
+              <Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} />
+              <Text numberOfLines={1} style={{ color: selected ? colors.primary : colors.subtext, fontSize: 11, fontWeight: selected ? "700" : "600" }}>{label}</Text>
+            </Pressable>;
+          })}
+        </ScrollView>
       </View>
       {localError ? <ErrorState message={localError} /> : null}
       {localNotice ? <View style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.successBg, justifyContent: "center" }}><Text style={{ color: colors.success, fontSize: 12, fontWeight: "700" }}>{localNotice}</Text></View> : null}
@@ -940,8 +980,8 @@ export default function DockerScreen() {
               })
             }
             style={{
-              height: 44,
-              borderRadius: 8,
+              height: 46,
+              borderRadius: 12,
               backgroundColor: colors.primary,
               flexDirection: "row",
               alignItems: "center",
@@ -966,18 +1006,21 @@ export default function DockerScreen() {
               const displayName = name.replace(/^\/+/, "") || name;
               const stats = containerStatsByKey.get(key) ?? containerStatsByKey.get(displayName);
               return (
-                <View key={key} style={{ borderRadius: 8, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.card, padding: 14, gap: 12, shadowColor: colors.shadow, shadowOpacity: 0.08, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 }}>
-                  <Pressable onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ minHeight: 86, flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 10, opacity: pressed ? 0.62 : 1 })}>
-                    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 132, minWidth: 132, alignItems: "flex-start", gap: 5 }}>
-                      <Text numberOfLines={1} style={{ width: "100%", color: colors.primary, fontSize: 14, lineHeight: 18, fontWeight: "800" }}>{displayName}</Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={42} />
-                        <View style={{ width: 3, height: 32, borderRadius: 2, backgroundColor: running ? colors.success : colors.disabled }} />
+                <View key={key} style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 14, gap: 12, shadowColor: colors.shadow, shadowOpacity: Platform.OS === "ios" || Platform.OS === "web" ? 0.055 : 0, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: Platform.OS === "android" ? 2 : 0 }}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`打开容器 ${displayName} 操作菜单`} onPress={() => setContainerMenu({ key, name, running, paused })} style={({ pressed }) => ({ minHeight: 54, flexDirection: "row", alignItems: "center", gap: 11, opacity: pressed ? 0.62 : 1 })}>
+                    <ContainerArtwork item={item} icons={iconLibrary.data ?? []} running={running} size={48} />
+                    <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Text numberOfLines={1} style={{ width: "100%", color: colors.text, fontSize: 15, lineHeight: 19, fontWeight: "800" }}>{displayName}</Text>
+                      <View style={{ alignSelf: "flex-start", maxWidth: "100%", minHeight: 24, paddingHorizontal: 8, borderRadius: 8, backgroundColor: running ? colors.successBg : colors.mutedCard, flexDirection: "row", alignItems: "center", gap: 5 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: running ? colors.success : colors.disabled }} />
+                        <Text numberOfLines={1} style={{ flexShrink: 1, color: running ? colors.success : colors.subtext, fontSize: 10, lineHeight: 13, fontWeight: "600" }}>{containerStatus(item, running, paused)}</Text>
                       </View>
-                      <Text numberOfLines={1} style={{ width: "100%", color: colors.subtext, fontSize: 10, lineHeight: 13 }}>{containerStatus(item, running, paused)}</Text>
                     </View>
-                    <ContainerStatsGrid stats={stats} />
+                    <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+                      <Ellipsis color={colors.subtext} size={18} />
+                    </View>
                   </Pressable>
+                  <ContainerStatsGrid stats={stats} />
                   <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
                   <View style={{ flexDirection: "row", gap: 6 }}>
                     {paused ? (
@@ -1023,7 +1066,7 @@ export default function DockerScreen() {
                     <ContainerCommandButton
                       icon={UploadCloud}
                       label="更新"
-                      color="#7c3aed"
+                      color={colors.cyan}
                       onPress={() => updateContainer(key, displayName)}
                     />
                   </View>
@@ -1055,8 +1098,8 @@ export default function DockerScreen() {
               }
               style={{
                 flex: 1,
-                height: 42,
-                borderRadius: 8,
+                height: 44,
+                borderRadius: 12,
                 backgroundColor: colors.primary,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1073,14 +1116,17 @@ export default function DockerScreen() {
               }
               style={{
                 flex: 1,
-                height: 42,
-                borderRadius: 8,
+                height: 44,
+                borderRadius: 12,
                 borderWidth: 1,
                 borderColor: colors.primary,
                 alignItems: "center",
                 justifyContent: "center",
+                flexDirection: "row",
+                gap: 6,
               }}
             >
+              <Wrench color={colors.primary} size={16} />
               <Text style={{ color: colors.primary, fontWeight: "800" }}>
                 构建
               </Text>
@@ -1100,7 +1146,7 @@ export default function DockerScreen() {
                       gap: 10,
                     }}
                   >
-                    <Image color={colors.warning} size={19} />
+                    <IconTile icon={Image} color={colors.warning} background={colors.warningBg} size={38} iconSize={19} />
                     <View style={{ flex: 1 }}>
                       <Text
                         numberOfLines={2}
@@ -1176,13 +1222,16 @@ export default function DockerScreen() {
               })
             }
             style={{
-              height: 42,
-              borderRadius: 8,
+              height: 46,
+              borderRadius: 12,
               backgroundColor: colors.primary,
+              flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
+              gap: 7,
             }}
           >
+            <Search color="#fff" size={17} />
             <Text style={{ color: "#fff", fontWeight: "800" }}>扫描项目</Text>
           </Pressable>
           {filtered.length ? (
@@ -1201,7 +1250,7 @@ export default function DockerScreen() {
                       gap: 9,
                     }}
                   >
-                    <Workflow color={colors.primary} size={19} />
+                    <IconTile icon={Workflow} size={40} iconSize={20} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontWeight: "800" }}>
                         {name}
@@ -1309,13 +1358,16 @@ export default function DockerScreen() {
               })
             }
             style={{
-              height: 42,
-              borderRadius: 8,
+              height: 46,
+              borderRadius: 12,
               backgroundColor: colors.primary,
+              flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
+              gap: 7,
             }}
           >
+            <Plus color="#fff" size={17} />
             <Text style={{ color: "#fff", fontWeight: "800" }}>创建网络</Text>
           </Pressable>
           {filtered.map((item, index) => {
@@ -1331,7 +1383,7 @@ export default function DockerScreen() {
                     gap: 10,
                   }}
                 >
-                  <Network color={colors.cyan} size={19} />
+                  <IconTile icon={Network} color={colors.cyan} background={colors.cyanBg} size={38} iconSize={19} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontWeight: "800" }}>
                       {name}
@@ -1378,13 +1430,16 @@ export default function DockerScreen() {
               })
             }
             style={{
-              height: 42,
-              borderRadius: 8,
+              height: 46,
+              borderRadius: 12,
               backgroundColor: colors.primary,
+              flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
+              gap: 7,
             }}
           >
+            <Plus color="#fff" size={17} />
             <Text style={{ color: "#fff", fontWeight: "800" }}>创建数据卷</Text>
           </Pressable>
           {filtered.map((item, index) => {
@@ -1400,7 +1455,7 @@ export default function DockerScreen() {
                     gap: 10,
                   }}
                 >
-                  <Database color={colors.warning} size={19} />
+                  <IconTile icon={Database} color={colors.warning} background={colors.warningBg} size={38} iconSize={19} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontWeight: "800" }}>
                       {name}
@@ -1471,14 +1526,18 @@ export default function DockerScreen() {
               )
             }
             style={{
-              height: 40,
-              borderRadius: 8,
+              minHeight: 44,
+              borderRadius: 12,
               borderWidth: 1,
               borderColor: colors.danger,
+              backgroundColor: colors.dangerBg,
+              flexDirection: "row",
               alignItems: "center",
               justifyContent: "center",
+              gap: 7,
             }}
           >
+            <Trash2 color={colors.danger} size={16} />
             <Text style={{ color: colors.danger, fontWeight: "800" }}>
               清空任务
             </Text>
@@ -1490,7 +1549,7 @@ export default function DockerScreen() {
                 <View
                   style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 9 }}
                 >
-                  <Activity color={colors.primary} size={18} />
+                  <IconTile icon={Activity} size={36} iconSize={18} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontWeight: "800" }}>
                       {pick(item, ["Name", "Type", "Action"], key)}
@@ -1554,13 +1613,16 @@ export default function DockerScreen() {
                 })
               }
               style={{
-                height: 42,
-                borderRadius: 8,
+                height: 46,
+                borderRadius: 12,
                 backgroundColor: colors.primary,
+                flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
+                gap: 7,
               }}
             >
+              <Settings2 color="#fff" size={17} />
               <Text style={{ color: "#fff", fontWeight: "800" }}>编辑设置</Text>
             </Pressable>
           ) : null}
@@ -1573,11 +1635,11 @@ export default function DockerScreen() {
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <Pressable
                   onPress={() => setEditor({ type: "group-create", title: "添加容器分组", value: { Name: "", Key: "" } })}
-                  style={{ flex: 1, height: 40, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  style={{ flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
                 ><Plus color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: "700" }}>添加分组</Text></Pressable>
                 <Pressable
                   onPress={() => setEditor({ type: "group-remove", title: "删除容器分组", value: { key: "" } })}
-                  style={{ flex: 1, height: 40, borderRadius: 8, borderWidth: 1, borderColor: colors.danger, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  style={{ flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.dangerBg, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
                 ><Trash2 color={colors.danger} size={15} /><Text style={{ color: colors.danger, fontWeight: "700" }}>删除分组</Text></Pressable>
               </View>
             </Panel>
@@ -1590,8 +1652,8 @@ export default function DockerScreen() {
               <StructuredDataView value={maintenance.data.imageUpgrades} />
               <Pressable
                 onPress={() => danger("清除升级状态", "确定清除全部镜像升级检查记录吗？", () => mutation.mutate({ type: "upgrade-status-clear" }))}
-                style={{ height: 40, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center" }}
-              ><Text style={{ color: colors.danger, fontWeight: "700" }}>清除升级状态</Text></Pressable>
+                style={{ minHeight: 44, borderRadius: 12, backgroundColor: colors.dangerBg, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+              ><Trash2 color={colors.danger} size={15} /><Text style={{ color: colors.danger, fontWeight: "700" }}>清除升级状态</Text></Pressable>
             </Panel>
           </> : null}
           <Panel>
@@ -1610,14 +1672,18 @@ export default function DockerScreen() {
                 }
                 style={{
                   flex: 1,
-                  height: 38,
-                  borderRadius: 8,
+                  minHeight: 44,
+                  borderRadius: 12,
                   borderWidth: 1,
                   borderColor: colors.primary,
+                  backgroundColor: colors.primarySoft,
+                  flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
+                  gap: 6,
                 }}
               >
+                <Plus color={colors.primary} size={15} />
                 <Text style={{ color: colors.primary, fontWeight: "700" }}>
                   添加
                 </Text>
@@ -1632,14 +1698,18 @@ export default function DockerScreen() {
                 }
                 style={{
                   flex: 1,
-                  height: 38,
-                  borderRadius: 8,
+                  minHeight: 44,
+                  borderRadius: 12,
                   borderWidth: 1,
                   borderColor: colors.danger,
+                  backgroundColor: colors.dangerBg,
+                  flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
+                  gap: 6,
                 }}
               >
+                <Trash2 color={colors.danger} size={15} />
                 <Text style={{ color: colors.danger, fontWeight: "700" }}>
                   删除
                 </Text>
@@ -1661,8 +1731,8 @@ export default function DockerScreen() {
               })
             }
             style={{
-              height: 42,
-              borderRadius: 8,
+              minHeight: 46,
+              borderRadius: 12,
               backgroundColor: colors.dangerBg,
               flexDirection: "row",
               alignItems: "center",
