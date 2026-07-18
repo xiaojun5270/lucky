@@ -189,8 +189,25 @@ const logEnvelopeKeys = new Set([
   'count', 'Count', 'page', 'Page', 'pageSize', 'PageSize', 'currentPage', 'CurrentPage',
 ]);
 
+function parseStructuredLogString(value: string) {
+  const trimmed = value.trim();
+  if (!((trimmed.startsWith('{') && trimmed.endsWith('}'))
+    || (trimmed.startsWith('[') && trimmed.endsWith(']')))) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function appendLogLines(value: unknown, lines: string[], seen = new Set<object>(), allowFallback = true) {
   if (typeof value === 'string') {
+    const parsed = parseStructuredLogString(value);
+    if (parsed) {
+      appendLogLines(parsed, lines, seen, allowFallback);
+      return lines.length > 0;
+    }
     lines.push(...value.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.trim().length > 0));
     return lines.length > 0;
   }
@@ -211,8 +228,9 @@ function appendLogLines(value: unknown, lines: string[], seen = new Set<object>(
     // A log entry can carry several aliases for the same message. Use the
     // first populated field so the UI does not render duplicate lines.
     for (const key of logTextKeys) {
-      if (value[key] === undefined || value[key] === null) continue;
+      if (!(key in value)) continue;
       recognizedEnvelope = true;
+      if (value[key] === undefined || value[key] === null) continue;
       const before = lines.length;
       appendLogLines(value[key], lines, seen, true);
       if (lines.length > before) return true;
@@ -225,15 +243,17 @@ function appendLogLines(value: unknown, lines: string[], seen = new Set<object>(
       if (lines.length > before) return true;
     }
     for (const key of logCollectionKeys) {
-      if (value[key] === undefined || value[key] === null) continue;
+      if (!(key in value)) continue;
       recognizedEnvelope = true;
+      if (value[key] === undefined || value[key] === null) continue;
       const before = lines.length;
       appendLogLines(value[key], lines, seen, true);
       if (lines.length > before) return true;
     }
     for (const key of logWrapperKeys) {
-      if (value[key] === undefined || value[key] === null) continue;
+      if (!(key in value)) continue;
       recognizedEnvelope = true;
+      if (value[key] === undefined || value[key] === null) continue;
       const before = lines.length;
       appendLogLines(value[key], lines, seen, true);
       if (lines.length > before) return true;
@@ -282,24 +302,81 @@ function nestedLogNumber(payload: LuckyRecord, keys: string[]) {
   return undefined;
 }
 
-function nestedLogCollection(payload: LuckyRecord): unknown[] | string | undefined {
+type LogCollectionMatch = {
+  found: boolean;
+  value?: unknown[] | string | null;
+};
+
+function nestedLogCollection(payload: LuckyRecord): LogCollectionMatch {
   const queue: unknown[] = [payload];
   const seen = new Set<object>();
+  let emptyValue: unknown[] | string | null | undefined;
+  let foundEmpty = false;
   while (queue.length) {
     const value = queue.shift();
     if (!isRecord(value) || seen.has(value)) continue;
     seen.add(value);
     for (const key of logCollectionKeys) {
+      if (!(key in value)) continue;
       const candidate = value[key];
-      if (Array.isArray(candidate) || typeof candidate === 'string') return candidate;
+      if (Array.isArray(candidate)) {
+        if (candidate.length) return { found: true, value: candidate };
+        if (!foundEmpty) {
+          emptyValue = candidate;
+          foundEmpty = true;
+        }
+      } else if (typeof candidate === 'string') {
+        const parsed = parseStructuredLogString(candidate);
+        if (Array.isArray(parsed)) {
+          if (parsed.length) return { found: true, value: parsed };
+          if (!foundEmpty) {
+            emptyValue = parsed;
+            foundEmpty = true;
+          }
+        } else if (isRecord(parsed)) {
+          queue.push(parsed);
+        } else if (candidate.trim()) {
+          return { found: true, value: candidate };
+        } else if (!foundEmpty) {
+          emptyValue = candidate;
+          foundEmpty = true;
+        }
+      } else if (candidate === null || candidate === undefined) {
+        if (!foundEmpty) {
+          emptyValue = null;
+          foundEmpty = true;
+        }
+      }
     }
     for (const key of logWrapperKeys) {
       const nested = value[key];
       if (isRecord(nested)) queue.push(nested);
-      else if (Array.isArray(nested) || typeof nested === 'string') return nested;
+      else if (Array.isArray(nested)) {
+        if (nested.length) return { found: true, value: nested };
+        if (!foundEmpty) {
+          emptyValue = nested;
+          foundEmpty = true;
+        }
+      } else if (typeof nested === 'string') {
+        const parsed = parseStructuredLogString(nested);
+        if (Array.isArray(parsed)) {
+          if (parsed.length) return { found: true, value: parsed };
+          if (!foundEmpty) {
+            emptyValue = parsed;
+            foundEmpty = true;
+          }
+        } else if (isRecord(parsed)) {
+          queue.push(parsed);
+        } else if (nested.trim()) {
+          return { found: true, value: nested };
+        } else if (!foundEmpty) {
+          emptyValue = nested;
+          foundEmpty = true;
+        }
+      }
     }
   }
-  return undefined;
+  return foundEmpty ? { found: true, value: emptyValue } : { found: false };
 }
 
 function logEntryCursor(value: unknown) {
@@ -341,11 +418,18 @@ function extractLogValue(value: unknown) {
 
 function globalLogBatch(payload: LuckyRecord, previousCursor: string) {
   const collection = nestedLogCollection(payload);
-  const entries = Array.isArray(collection) ? collection : undefined;
+  const entries = Array.isArray(collection.value)
+    ? collection.value
+    : collection.found && (collection.value === null || collection.value === undefined)
+      ? []
+      : undefined;
   const cursors = entries?.map(logEntryCursor) ?? [];
   const supportsCursor = entries !== undefined && (entries.length ? cursors.every(Boolean) : Boolean(previousCursor));
-  const latestCursor = supportsCursor ? cursors[cursors.length - 1] : previousCursor;
-  const reset = Boolean(previousCursor && latestCursor && compareLogCursor(latestCursor, previousCursor) < 0);
+  const responseCursor = supportsCursor && cursors.length ? cursors[cursors.length - 1] : previousCursor;
+  const logsCount = nestedLogNumber(payload, ['logsCount', 'LogsCount']);
+  const emptied = Boolean(previousCursor && collection.found && entries?.length === 0 && logsCount === 0);
+  const reset = emptied || Boolean(previousCursor && responseCursor && compareLogCursor(responseCursor, previousCursor) < 0);
+  const latestCursor = emptied ? '' : responseCursor;
   const selectedEntries = supportsCursor && previousCursor && !reset
     ? entries!.filter((_, index) => compareLogCursor(cursors[index], previousCursor) > 0)
     : entries;
@@ -366,10 +450,10 @@ function logResult(payload: LuckyRecord, page = 1, requestedPageSize = 100, page
   const pageSize = responsePageSize && responsePageSize > 0 ? responsePageSize : requestedPageSize;
   const total = nestedLogNumber(payload, ['total', 'Total', 'totalCount', 'TotalCount', 'logsCount', 'LogsCount', 'count', 'Count']);
   const collection = nestedLogCollection(payload);
-  const entryCount = Array.isArray(collection)
-    ? collection.length
-    : typeof collection === 'string'
-      ? collection.split(/\r?\n/).filter((line) => line.trim()).length
+  const entryCount = Array.isArray(collection.value)
+    ? collection.value.length
+    : typeof collection.value === 'string'
+      ? collection.value.split(/\r?\n/).filter((line) => line.trim()).length
       : lines.length;
   const hasMore = paged && (total !== undefined ? page * pageSize < total : entryCount >= pageSize);
   return { lines, raw: payload, total, pageSize, page, hasMore };

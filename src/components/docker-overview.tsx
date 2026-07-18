@@ -948,6 +948,7 @@ export function DockerOverviewDashboard({
   statsLoading,
   statsError,
   showHeader = true,
+  showDockerSummary = true,
   showContainerInsights = true,
   onSelectView,
   onSelectContainer,
@@ -959,6 +960,7 @@ export function DockerOverviewDashboard({
   statsLoading: boolean;
   statsError?: string;
   showHeader?: boolean;
+  showDockerSummary?: boolean;
   showContainerInsights?: boolean;
   onSelectView: (view: DockerOverviewTarget) => void;
   onSelectContainer: (name: string) => void;
@@ -1013,7 +1015,7 @@ export function DockerOverviewDashboard({
       liveStatus={liveStatus}
     />
 
-    <View>
+    {showDockerSummary ? <View>
       <View
         onLayout={(event) => {
           const nextWidth = Math.floor(event.nativeEvent.layout.width);
@@ -1027,7 +1029,7 @@ export function DockerOverviewDashboard({
         <DockerSummaryItem width={summaryItemWidth} icon={Database} color={colors.success} background={colors.successBg} value={count(data?.volumeCount)} label="数据卷" onPress={() => onSelectView("volumes")} />
         <DockerSummaryItem width={summaryItemWidth} icon={Network} color={colors.cyan} background={colors.cyanBg} value={count(data?.networkCount)} label="网络" onPress={() => onSelectView("networks")} />
       </View>
-    </View>
+    </View> : null}
 
     {showContainerInsights ? <>
       <View style={{ padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>

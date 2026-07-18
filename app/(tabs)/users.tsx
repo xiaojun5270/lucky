@@ -39,7 +39,7 @@ export default function LogsScreen() {
     const batch = query.data;
     if (!batch) return;
     const restarted = batch.reset || Boolean(batch.startTime && startTimeRef.current && batch.startTime !== startTimeRef.current);
-    if (batch.cursor) cursorRef.current = batch.cursor;
+    cursorRef.current = batch.cursor;
     if (batch.startTime) startTimeRef.current = batch.startTime;
     setLines((current) => {
       if (batch.incremental && !restarted && !batch.lines.length) return current;
@@ -63,6 +63,6 @@ export default function LogsScreen() {
       style={{ flex: 1, width: '100%' }}
       contentContainerStyle={{ paddingBottom: 98 }}
       renderItem={({ item: line, index }) => <Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 11, lineHeight: 18, paddingVertical: 5, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}>{line.text}</Text>}
-    /></View> : !query.isLoading && !query.error ? <EmptyState message="暂无日志" icon={Terminal} /> : null}
+    /></View> : !query.isLoading && !query.error ? <EmptyState message="暂无实时日志" icon={Terminal} /> : null}
   </Page>;
 }

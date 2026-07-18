@@ -48,7 +48,7 @@ import {
   Wrench,
   X,
 } from "lucide-react-native";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -58,6 +58,7 @@ import {
   FullScreenSafeArea,
   IconTile,
   Page,
+  PageHeader,
   Panel,
   ResponsiveTabBar,
   SearchField,
@@ -202,6 +203,16 @@ const tabs = [
   ["settings", "设置", Settings2],
   ["logs", "日志", FileText],
 ] as const;
+
+const dockerListViews: readonly DockerView[] = [
+  "containers",
+  "images",
+  "compose",
+  "networks",
+  "volumes",
+  "tasks",
+  "logs",
+];
 
 function dockerViewParam(value: string | string[] | undefined): DockerView | undefined {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -1987,6 +1998,73 @@ export default function DockerScreen() {
     }
   }
 
+  const isDockerListView = dockerListViews.includes(view);
+  const pageRefreshing = active.isFetching || (view === "settings" && maintenance.isFetching);
+
+  function refreshDockerView() {
+    active.refetch();
+    if (view === "overview" || view === "containers") {
+      containerStats.refetch();
+      if (liveStatsNeeded) liveContainerStats.refetch();
+    }
+    if (view === "settings") {
+      mirrors.refetch();
+      maintenance.refetch();
+    }
+  }
+
+  function selectDockerView(key: DockerView) {
+    setView(key);
+    setSearch("");
+    setOutput("");
+    if (key === "logs") setDockerLogPage(1);
+  }
+
+  function renderDockerNavigation(includePageHeader: boolean) {
+    return (
+      <View style={{ gap: 16 }}>
+        {includePageHeader ? (
+          <PageHeader
+            title="Docker"
+            subtitle="容器、镜像与 Compose 管理"
+            icon={Container}
+            refreshing={pageRefreshing}
+            onRefresh={refreshDockerView}
+          />
+        ) : null}
+        <ResponsiveTabBar tabs={tabs} value={view} onChange={selectDockerView} />
+        {localError ? <ErrorState message={localError} /> : null}
+        {localNotice ? <View style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.successBg, justifyContent: "center" }}><Text style={{ color: colors.success, fontSize: 12, fontWeight: "700" }}>{localNotice}</Text></View> : null}
+        {active.error ? <ErrorState message={active.error.message} retry={() => active.refetch()} /> : null}
+        {!containerStatRows.length && liveStatsNeeded && liveContainerStats.error && (view === "overview" || view === "containers") ? (
+          <ErrorState
+            message="容器统计暂时不可用"
+            retry={() => {
+              containerStats.refetch();
+              liveContainerStats.refetch();
+            }}
+          />
+        ) : null}
+        {(["containers", "images", "compose", "networks", "volumes", "tasks"] as DockerView[]).includes(view) ? (
+          <SearchField
+            value={search}
+            onChangeText={setSearch}
+            placeholder={`搜索${tabs.find(([key]) => key === view)?.[1] ?? ""}`}
+          />
+        ) : null}
+      </View>
+    );
+  }
+
+  function renderDockerListHeader(content: ReactNode) {
+    return (
+      <View style={{ gap: 16, paddingBottom: 16 }}>
+        {renderDockerNavigation(true)}
+        {content}
+      </View>
+    );
+  }
+
   return (
     <Page
       title="Docker"
@@ -1994,91 +2072,41 @@ export default function DockerScreen() {
       icon={Container}
       safeTop={false}
       contentMaxWidth={view === "overview" ? 1120 : 820}
-      scrollable={!(["containers", "images", "compose", "networks", "volumes", "tasks", "logs"] as DockerView[]).includes(view)}
-      refreshing={active.isFetching || (view === "settings" && maintenance.isFetching)}
-      onRefresh={() => {
-        active.refetch();
-        if (view === "overview" || view === "containers") {
-          containerStats.refetch();
-          if (liveStatsNeeded) liveContainerStats.refetch();
-        }
-        if (view === "settings") {
-          mirrors.refetch();
-          maintenance.refetch();
-        }
-      }}
+      scrollable={!isDockerListView}
+      showHeader={!isDockerListView}
+      refreshing={pageRefreshing}
+      onRefresh={refreshDockerView}
     >
-      <ResponsiveTabBar
-        tabs={tabs}
-        value={view}
-        onChange={(key) => {
-          setView(key);
-          setSearch("");
-          setOutput("");
-          if (key === "logs") setDockerLogPage(1);
-        }}
-      />
-      {localError ? <ErrorState message={localError} /> : null}
-      {localNotice ? <View style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.successBg, justifyContent: "center" }}><Text style={{ color: colors.success, fontSize: 12, fontWeight: "700" }}>{localNotice}</Text></View> : null}
-      {active.error ? (
-        <ErrorState
-          message={active.error.message}
-          retry={() => active.refetch()}
-        />
-      ) : null}
-      {!containerStatRows.length && liveStatsNeeded && liveContainerStats.error && (view === "overview" || view === "containers") ? (
-        <ErrorState
-          message="容器统计暂时不可用"
-          retry={() => {
-            containerStats.refetch();
-            liveContainerStats.refetch();
-          }}
-        />
-      ) : null}
-      {[
-        "containers",
-        "images",
-        "compose",
-        "networks",
-        "volumes",
-        "tasks",
-      ].includes(view) ? (
-        <SearchField
-          value={search}
-          onChangeText={setSearch}
-          placeholder={`搜索${tabs.find(([key]) => key === view)?.[1] ?? ""}`}
-        />
-      ) : null}
+      {!isDockerListView ? renderDockerNavigation(false) : null}
 
       {view === "containers" ? (
-        <>
-          <SectionHeader
-            icon={Container}
-            title="容器"
-            meta={`${filtered.length} 项`}
-          />
-          <Pressable
-            onPress={() =>
-              setEditor({
-                type: "container-create",
-                title: "创建容器",
-                value: { name: "", image: "", config: {} },
-              })
-            }
-            style={{
-              height: 46,
-              borderRadius: 12,
-              backgroundColor: colors.primary,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-            }}
-          >
-            <Plus color="#fff" size={17} />
-            <Text style={{ color: "#fff", fontWeight: "800" }}>创建容器</Text>
-          </Pressable>
-          <FlatList
+        <FlatList
+            ListHeaderComponent={renderDockerListHeader(
+              <>
+                <SectionHeader icon={Container} title="容器" meta={`${filtered.length} 项`} />
+                <Pressable
+                  onPress={() =>
+                    setEditor({
+                      type: "container-create",
+                      title: "创建容器",
+                      value: { name: "", image: "", config: {} },
+                    })
+                  }
+                  style={{
+                    height: 46,
+                    borderRadius: 12,
+                    backgroundColor: colors.primary,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 7,
+                  }}
+                >
+                  <Plus color="#fff" size={17} />
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>创建容器</Text>
+                </Pressable>
+              </>,
+            )}
             data={filtered}
             keyExtractor={(item, index) => keyOf(item, index)}
             extraData={containerStatRows}
@@ -2172,11 +2200,12 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "images" ? (
-        <>
+        <FlatList
+          ListHeaderComponent={renderDockerListHeader(
+            <>
           <SectionHeader
             icon={Image}
             title="镜像列表"
@@ -2332,7 +2361,8 @@ export default function DockerScreen() {
               <Text style={{ color: validSelectedImageIds.length ? colors.danger : colors.disabled, fontSize: 12, fontWeight: "700" }}>{imageDeleteProgress ? `删除中 ${imageDeleteProgress.completed}/${imageDeleteProgress.total}` : "删除所选"}</Text>
             </Pressable>
           </View> : null}
-          <FlatList
+            </>,
+          )}
             data={visibleImageEntries}
             keyExtractor={({ id }) => id}
             extraData={`${imageSelectionMode}:${validSelectedImageIds.join(",")}:${imageActionBusy}`}
@@ -2427,11 +2457,12 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "compose" ? (
-        <>
+        <FlatList
+          ListHeaderComponent={renderDockerListHeader(
+            <>
           <SectionHeader
             icon={Workflow}
             title="Compose 项目"
@@ -2458,7 +2489,8 @@ export default function DockerScreen() {
             <Search color="#fff" size={17} />
             <Text style={{ color: "#fff", fontWeight: "800" }}>扫描项目</Text>
           </Pressable>
-          <FlatList
+            </>,
+          )}
             data={filtered}
             keyExtractor={(item, index) => {
               const payload = composePayload(item);
@@ -2693,11 +2725,12 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "networks" ? (
-        <>
+        <FlatList
+          ListHeaderComponent={renderDockerListHeader(
+            <>
           <SectionHeader
             icon={Network}
             title="Docker 网络"
@@ -2724,7 +2757,8 @@ export default function DockerScreen() {
             <Plus color="#fff" size={17} />
             <Text style={{ color: "#fff", fontWeight: "800" }}>创建网络</Text>
           </Pressable>
-          <FlatList
+            </>,
+          )}
             data={filtered}
             keyExtractor={(item, index) => keyOf(item, index)}
             keyboardShouldPersistTaps="handled"
@@ -2773,11 +2807,12 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "volumes" ? (
-        <>
+        <FlatList
+          ListHeaderComponent={renderDockerListHeader(
+            <>
           <SectionHeader
             icon={Database}
             title="数据卷"
@@ -2831,7 +2866,8 @@ export default function DockerScreen() {
             <Upload color={colors.primary} size={17} />
             <Text style={{ color: colors.primary, fontWeight: "800" }}>导入数据卷</Text>
           </Pressable>
-          <FlatList
+            </>,
+          )}
             data={filtered}
             keyExtractor={(item, index) => keyOf(item, index)}
             keyboardShouldPersistTaps="handled"
@@ -2960,11 +2996,12 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "tasks" ? (
-        <>
+        <FlatList
+          ListHeaderComponent={renderDockerListHeader(
+            <>
           <SectionHeader
             icon={Activity}
             title="后台任务"
@@ -2993,7 +3030,8 @@ export default function DockerScreen() {
               清空任务
             </Text>
           </Pressable>
-          <FlatList
+            </>,
+          )}
             data={filtered}
             keyExtractor={(item, index) => keyOf(item, index)}
             keyboardShouldPersistTaps="handled"
@@ -3040,7 +3078,6 @@ export default function DockerScreen() {
               );
             }}
           />
-        </>
       ) : null}
 
       {view === "overview" ? (
@@ -3216,44 +3253,30 @@ export default function DockerScreen() {
       ) : null}
 
       {view === "logs" ? (
-        <>
-          <SectionHeader icon={FileText} title="Docker 日志" />
-          {output ? (
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 98 }}>
-              <Panel><StructuredDataView value={output} /></Panel>
-            </ScrollView>
-          ) : (
-            <>
-              <FlatList
-                data={dockerLogLines}
-                keyExtractor={(line, index) => `${index}-${line.slice(0, 24)}`}
-                removeClippedSubviews={Platform.OS === "android"}
-                initialNumToRender={30}
-                maxToRenderPerBatch={30}
-                windowSize={9}
-                style={{ flex: 1, width: "100%" }}
-                contentContainerStyle={{ paddingBottom: 98, flexGrow: dockerLogLines.length ? 0 : 1 }}
-                ListEmptyComponent={!logs.isLoading ? <EmptyState message="暂无 Docker 日志" icon={FileText} /> : null}
-                renderItem={({ item: line, index }) => (
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.text,
-                      fontFamily: "monospace",
-                      fontSize: 10,
-                      lineHeight: 17,
-                      paddingHorizontal: 12,
-                      paddingVertical: 7,
-                      borderTopWidth: index ? 1 : 0,
-                      borderTopColor: colors.rowBorder,
-                      backgroundColor: colors.card,
-                    }}
-                  >
-                    {line}
-                  </Text>
-                )}
-              />
-              <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        output ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 98, gap: 16 }}
+          >
+            {renderDockerNavigation(true)}
+            <SectionHeader icon={FileText} title="Docker 日志" />
+            <Panel><StructuredDataView value={output} /></Panel>
+          </ScrollView>
+        ) : (
+          <FlatList
+            ListHeaderComponent={renderDockerListHeader(<SectionHeader icon={FileText} title="Docker 日志" />)}
+            data={dockerLogLines}
+            keyExtractor={(line, index) => `${index}-${line.slice(0, 24)}`}
+            removeClippedSubviews={Platform.OS === "android"}
+            initialNumToRender={30}
+            maxToRenderPerBatch={30}
+            windowSize={9}
+            style={{ flex: 1, width: "100%" }}
+            contentContainerStyle={{ paddingBottom: 98, flexGrow: dockerLogLines.length ? 0 : 1 }}
+            ListEmptyComponent={!logs.isLoading ? <EmptyState message="暂无 Docker 日志" icon={FileText} /> : null}
+            ListFooterComponent={(
+              <View style={{ minHeight: 60, paddingTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 }}>
                 <Pressable
                   accessibilityLabel="上一页 Docker 日志"
                   disabled={dockerLogPage <= 1 || logs.isFetching}
@@ -3272,9 +3295,27 @@ export default function DockerScreen() {
                   <ChevronRight color={dockerLogLines.length < 200 ? colors.disabled : colors.primary} size={18} />
                 </Pressable>
               </View>
-            </>
-          )}
-        </>
+            )}
+            renderItem={({ item: line, index }) => (
+              <Text
+                selectable
+                style={{
+                  color: colors.text,
+                  fontFamily: "monospace",
+                  fontSize: 10,
+                  lineHeight: 17,
+                  paddingHorizontal: 12,
+                  paddingVertical: 7,
+                  borderTopWidth: index ? 1 : 0,
+                  borderTopColor: colors.rowBorder,
+                  backgroundColor: colors.card,
+                }}
+              >
+                {line}
+              </Text>
+            )}
+          />
+        )
       ) : null}
 
       {detail ? <DockerDetailViewer detail={detail} close={closeDetail} /> : null}
