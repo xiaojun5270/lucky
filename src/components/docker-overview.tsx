@@ -941,7 +941,7 @@ export function DockerOverviewDashboard({
   data?: Awaited<ReturnType<typeof getDockerOverview>>;
   active: boolean;
   liveStatus?: DockerLiveStatus;
-  stats?: LuckyRecord;
+  stats?: unknown;
   statsLoading: boolean;
   statsError?: string;
   showHeader?: boolean;

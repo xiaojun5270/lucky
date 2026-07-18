@@ -138,20 +138,49 @@ export const getDockerContainerLogs = (id: string, tail = 200) =>
   });
 export const getDockerContainerStats = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/stats-cached`);
+export const getDockerContainerLiveStats = (id: string) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/stats`, "GET", undefined, undefined, 10000);
 export const getDockerContainerProcesses = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/processes`);
 export const getAllDockerContainerStats = () =>
-  callDockerApi(
-    "containers",
-    "GET",
-    undefined,
-    {
-      all: true,
-      includeStats: true,
-      includeNetworkMode: true,
-    },
-    60000,
-  );
+  callDockerApi("containers/stats-cached", "GET", undefined, undefined, 15000);
+
+function containerText(item: LuckyRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (Array.isArray(value) && value.length) return value.map(String).join(", ");
+  }
+  return "";
+}
+
+export async function refreshDockerContainerStats(onProgress?: (payload: LuckyRecord) => void) {
+  const { items } = await listDockerContainers();
+  const targets = items.map((item) => {
+    const id = containerText(item, ["Id", "ID", "id", "ContainerID", "ContainerId"]);
+    const name = containerText(item, ["Names", "Name", "name", "ContainerName"]).replace(/^\/+/, "");
+    const state = [item.State, item.state, item.Status, item.status].filter(Boolean).join(" ").toLowerCase();
+    return { id, name, running: /running|active|\bup\b|paused|restarting/.test(state) };
+  }).filter((item) => item.id && item.running);
+
+  const stats: LuckyRecord[] = [];
+  for (let index = 0; index < targets.length; index += 6) {
+    const batch = targets.slice(index, index + 6);
+    const results = await Promise.all(batch.map(async (target) => {
+      try {
+        const result = await getDockerContainerLiveStats(target.id);
+        return { Id: target.id, Name: target.name, stats: result } as LuckyRecord;
+      } catch {
+        return undefined;
+      }
+    }));
+    stats.push(...results.filter((item): item is LuckyRecord => Boolean(item)));
+    onProgress?.({ ret: 0, stats: [...stats], sampled: stats.length, total: targets.length });
+  }
+  const payload = { ret: 0, stats, sampled: stats.length, total: targets.length } as LuckyRecord;
+  if (!targets.length) onProgress?.(payload);
+  return payload;
+}
 export const commitDockerContainer = (id: string, data: LuckyRecord) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/commit`, "POST", data);
 export const copyDockerContainer = (id: string, name: string) =>

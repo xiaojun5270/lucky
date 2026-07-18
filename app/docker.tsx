@@ -34,7 +34,7 @@ import {
   Wrench,
   X,
 } from "lucide-react-native";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -97,6 +97,7 @@ import {
   listDockerVolumes,
   pullDockerImage,
   pruneDocker,
+  refreshDockerContainerStats,
   readDockerComposeConfig,
   removeDockerContainer,
   removeDockerContainerGroup,
@@ -375,6 +376,7 @@ function IconButton({
   color,
   disabled = false,
   fluid = false,
+  basis = 88,
   onPress,
 }: {
   icon: typeof Pencil;
@@ -382,6 +384,7 @@ function IconButton({
   color: string;
   disabled?: boolean;
   fluid?: boolean;
+  basis?: number;
   onPress: () => void;
 }) {
   const colors = useAppTheme();
@@ -394,7 +397,7 @@ function IconButton({
       style={({ pressed }) => ({
         flexGrow: fluid ? 1 : 0,
         flexShrink: fluid ? 1 : 0,
-        flexBasis: fluid ? 88 : "auto",
+        flexBasis: fluid ? basis : "auto",
         minWidth: 64,
         minHeight: 42,
         paddingHorizontal: 10,
@@ -519,6 +522,7 @@ export default function DockerScreen() {
   const colors = useAppTheme();
   const isScreenFocused = useIsFocused();
   const params = useLocalSearchParams<{ view?: string; search?: string }>();
+  const tabScrollRef = useRef<ScrollView>(null);
   const requestedView = dockerViewParam(params.view);
   const requestedSearch = stringParam(params.search);
   const [view, setView] = useState<DockerView>(requestedView ?? "containers");
@@ -532,6 +536,7 @@ export default function DockerScreen() {
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
   const [localNotice, setLocalNotice] = useState("");
+  const [progressiveContainerStats, setProgressiveContainerStats] = useState<LuckyRecord>();
   const overviewActive = view === "overview" && isScreenFocused && appIsActive;
   const containerStatsActive =
     (view === "overview" || view === "containers") && isScreenFocused && appIsActive;
@@ -550,6 +555,13 @@ export default function DockerScreen() {
     });
     return () => subscription.remove();
   }, []);
+  useEffect(() => {
+    const index = tabs.findIndex(([key]) => key === view);
+    const frame = requestAnimationFrame(() => {
+      tabScrollRef.current?.scrollTo({ x: Math.max(0, index * 82 - 70), animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [view]);
   const containers = useQuery({
     queryKey: ["docker", "containers"],
     queryFn: listDockerContainers,
@@ -602,6 +614,17 @@ export default function DockerScreen() {
     refetchOnMount: "always",
     refetchInterval: containerStatsActive ? 5_000 : false,
     refetchIntervalInBackground: false,
+    retry: false,
+  });
+  const liveContainerStats = useQuery({
+    queryKey: ["docker", "container-stats-live"],
+    queryFn: () => refreshDockerContainerStats(setProgressiveContainerStats),
+    enabled: containerStatsActive,
+    staleTime: 5_000,
+    refetchOnMount: "always",
+    refetchInterval: containerStatsActive ? 15_000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
   const config = useQuery({
     queryKey: ["docker", "config"],
@@ -782,9 +805,13 @@ export default function DockerScreen() {
       (item) => !word || JSON.stringify(item).toLowerCase().includes(word),
     );
   }, [source, deferredSearch]);
+  const containerStatsSource = useMemo(
+    () => [containerStats.data, liveContainerStats.data, progressiveContainerStats],
+    [containerStats.data, liveContainerStats.data, progressiveContainerStats],
+  );
   const containerStatRows = useMemo(
-    () => dockerStatRows(containerStats.data, containers.data?.items ?? emptyDockerContainers),
-    [containerStats.data, containers.data?.items],
+    () => dockerStatRows(containerStatsSource, containers.data?.items ?? emptyDockerContainers),
+    [containerStatsSource, containers.data?.items],
   );
   const containerStatsByKey = useMemo(() => {
     const result = new Map<string, DockerStatRow>();
@@ -891,7 +918,10 @@ export default function DockerScreen() {
       refreshing={active.isFetching || (view === "settings" && maintenance.isFetching)}
       onRefresh={() => {
         active.refetch();
-        if (view === "overview" || view === "containers") containerStats.refetch();
+        if (view === "overview" || view === "containers") {
+          containerStats.refetch();
+          liveContainerStats.refetch();
+        }
         if (view === "settings") {
           mirrors.refetch();
           maintenance.refetch();
@@ -899,7 +929,7 @@ export default function DockerScreen() {
       }}
     >
       <View style={{ width: "100%", maxWidth: 820, alignSelf: "center", padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+        <ScrollView ref={tabScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingRight: 4 }}>
           {tabs.map(([key, label, Icon]) => {
             const selected = view === key;
             return <Pressable
@@ -943,10 +973,13 @@ export default function DockerScreen() {
           retry={() => active.refetch()}
         />
       ) : null}
-      {containerStats.error && (view === "overview" || view === "containers") ? (
+      {!containerStats.data && !liveContainerStats.data && !progressiveContainerStats && containerStats.error && liveContainerStats.error && (view === "overview" || view === "containers") ? (
         <ErrorState
-          message={`容器实时统计：${containerStats.error.message}`}
-          retry={() => containerStats.refetch()}
+          message="容器统计暂时不可用"
+          retry={() => {
+            containerStats.refetch();
+            liveContainerStats.refetch();
+          }}
         />
       ) : null}
       {[
@@ -1138,19 +1171,12 @@ export default function DockerScreen() {
               const name = pick(item, ["RepoTags", "Tags", "Name"], "<none>");
               return (
                 <Panel key={key}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
+                  <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <IconTile icon={Image} color={colors.warning} background={colors.warningBg} size={38} iconSize={19} />
-                    <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Text
                         numberOfLines={2}
-                        style={{ color: colors.text, fontWeight: "800" }}
+                        style={{ color: colors.text, fontSize: 14, lineHeight: 18, fontWeight: "800" }}
                       >
                         {name}
                       </Text>
@@ -1164,16 +1190,21 @@ export default function DockerScreen() {
                         {key.slice(0, 16)} · {bytes(item.Size)}
                       </Text>
                     </View>
+                  </View>
+                  <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
                     <IconButton
                       icon={Search}
                       label="详情"
                       color={colors.text}
+                      fluid
                       onPress={() => inspect("image", key)}
                     />
                     <IconButton
                       icon={Pencil}
                       label="标记"
                       color={colors.primary}
+                      fluid
                       onPress={() =>
                         setEditor({
                           type: "image-tag",
@@ -1187,6 +1218,7 @@ export default function DockerScreen() {
                       icon={Trash2}
                       label="删除"
                       color={colors.danger}
+                      fluid
                       onPress={() =>
                         danger("确认删除", `删除镜像 ${name}？`, () =>
                           mutation.mutate({
@@ -1447,28 +1479,26 @@ export default function DockerScreen() {
             const name = pick(item, ["Name", "name"], key);
             return (
               <Panel key={key}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
+                <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <IconTile icon={Database} color={colors.warning} background={colors.warningBg} size={38} iconSize={19} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontWeight: "800" }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={2} style={{ color: colors.text, fontSize: 13, lineHeight: 17, fontWeight: "800" }}>
                       {name}
                     </Text>
-                    <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                    <Text numberOfLines={2} style={{ color: colors.subtext, fontSize: 11, lineHeight: 15, marginTop: 3 }}>
                       {pick(item, ["Driver"], "local")} ·{" "}
                       {pick(item, ["Mountpoint"])}
                     </Text>
                   </View>
+                </View>
+                <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
                   <IconButton
                     icon={Save}
                     label="备份"
                     color={colors.primary}
+                    fluid
+                    basis={120}
                     onPress={() =>
                       mutation.mutate({ type: "volume-backup", key: name })
                     }
@@ -1477,6 +1507,8 @@ export default function DockerScreen() {
                     icon={Search}
                     label="备份列表"
                     color={colors.text}
+                    fluid
+                    basis={120}
                     onPress={async () =>
                       setOutput(await listDockerVolumeBackups(name))
                     }
@@ -1485,6 +1517,8 @@ export default function DockerScreen() {
                     icon={RotateCw}
                     label="恢复备份"
                     color={colors.warning}
+                    fluid
+                    basis={120}
                     onPress={() =>
                       setEditor({
                         type: "volume-restore",
@@ -1498,6 +1532,8 @@ export default function DockerScreen() {
                     icon={Trash2}
                     label="删除"
                     color={colors.danger}
+                    fluid
+                    basis={120}
                     onPress={() =>
                       danger("确认删除", `删除数据卷 ${name}？`, () =>
                         mutation.mutate({ type: "volume-remove", key: name }),
@@ -1584,9 +1620,9 @@ export default function DockerScreen() {
         <DockerOverviewDashboard
           data={overview.data}
           active={overviewActive}
-          stats={containerStats.data}
-          statsLoading={containerStats.isLoading}
-          statsError={containerStats.error?.message}
+          stats={containerStatsSource}
+          statsLoading={!containerStats.data && !liveContainerStats.data && !progressiveContainerStats && (containerStats.isLoading || liveContainerStats.isLoading)}
+          statsError={!containerStats.data && !liveContainerStats.data && !progressiveContainerStats && containerStats.error && liveContainerStats.error ? "容器统计暂时不可用" : undefined}
           onSelectView={(nextView) => {
             setView(nextView);
             setSearch("");
