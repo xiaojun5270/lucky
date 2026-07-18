@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useIsFocused, useRouter } from 'expo-router';
-import { ChevronRight, Cpu, Download, Gauge, Globe2, HardDrive, LockKeyhole, Network, Route, Upload } from 'lucide-react-native';
+import { ChevronRight, Cpu, Download, Eye, EyeOff, Gauge, Globe2, HardDrive, LockKeyhole, Network, Route, Upload } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import Svg, { Line, Polyline } from 'react-native-svg';
@@ -85,6 +85,7 @@ function ReverseProxyOverview({
   onPress: () => void;
 }) {
   const colors = useAppTheme();
+  const [portsMasked, setPortsMasked] = useState(false);
   const summary = useMemo(() => {
     const rules = data?.items ?? [];
     const enabledRules = rules.filter((rule) => asEnabled(rule.Enable ?? rule.enable));
@@ -119,14 +120,14 @@ function ReverseProxyOverview({
     },
   ];
 
-  return <Pressable
-    accessibilityRole="button"
-    accessibilityLabel="打开反向代理规则"
-    onPress={onPress}
-    style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1, transform: [{ scale: pressed ? 0.992 : 1 }] })}
-  >
-    <Panel>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+  return <Panel>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开反向代理规则"
+          onPress={onPress}
+          style={({ pressed }) => ({ flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.62 : 1 })}
+        >
         <IconTile icon={Globe2} size={42} iconSize={21} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ color: colors.text, fontSize: 16, lineHeight: 21, fontWeight: '800' }}>反向代理</Text>
@@ -137,6 +138,24 @@ function ReverseProxyOverview({
         <View style={{ width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mutedCard }}>
           <ChevronRight color={colors.subtext} size={17} />
         </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={portsMasked ? '显示端口信息' : '隐藏端口信息'}
+          accessibilityState={{ selected: portsMasked }}
+          onPress={() => setPortsMasked((value) => !value)}
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: portsMasked ? colors.primarySoft : colors.mutedCard,
+            opacity: pressed ? 0.62 : 1,
+          })}
+        >
+          {portsMasked ? <Eye color={colors.primary} size={18} /> : <EyeOff color={colors.subtext} size={18} />}
+        </Pressable>
       </View>
 
       <View style={{ minHeight: 66, borderRadius: 14, backgroundColor: colors.mutedCard, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
@@ -155,6 +174,7 @@ function ReverseProxyOverview({
           const network = webRuleText(rule, ['Network'], 'tcp');
           const host = webRuleText(rule, ['ListenIP'], '*') || '*';
           const port = webRuleText(rule, ['ListenPort'], '--');
+          const visiblePort = portsMasked && port !== '--' ? '••••' : port;
           const subCount = webSubRules(rule).length;
           const tls = asEnabled(rule.EnableTLS ?? rule.enableTLS ?? rule.TLS, false);
           return <View key={webRuleText(rule, ['RuleKey', 'Key', 'key'], String(index))} style={{ minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -163,14 +183,13 @@ function ReverseProxyOverview({
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ color: colors.text, fontSize: 12, lineHeight: 16, fontWeight: '700' }}>{name}</Text>
-              <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10, lineHeight: 14 }}>{network} · {host}:{port}</Text>
+              <Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 10, lineHeight: 14 }}>{network} · {host}:{visiblePort}</Text>
             </View>
             <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: '600' }}>{subCount} 个子规则</Text>
           </View>;
         })}
       </View> : ready && !error ? <Text style={{ color: colors.subtext, fontSize: 11, lineHeight: 16, textAlign: 'center' }}>暂无启用中的反向代理规则</Text> : null}
-    </Panel>
-  </Pressable>;
+    </Panel>;
 }
 
 export default function DashboardScreen() {
@@ -192,8 +211,8 @@ export default function DashboardScreen() {
     refetchIntervalInBackground: false,
   });
   const webServiceOverview = useQuery({
-    queryKey: ['webservice', 'rules', 'overview'],
-    queryFn: ({ signal }) => getWebServiceRules(true, signal),
+    queryKey: ['webservice', 'rules'],
+    queryFn: ({ signal }) => getWebServiceRules(false, signal),
     enabled: dockerActive,
     staleTime: 15_000,
     refetchInterval: dockerActive ? 30_000 : false,
