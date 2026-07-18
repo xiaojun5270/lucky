@@ -4,6 +4,7 @@ import { useIsFocused, useLocalSearchParams } from "expo-router";
 import {
   Activity,
   Box,
+  Check,
   CircleStop,
   Container,
   Cpu,
@@ -16,12 +17,14 @@ import {
   HardDriveDownload,
   HardDriveUpload,
   Image,
+  ListChecks,
   MemoryStick,
   Network,
   Pause,
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   RotateCw,
   Save,
   Search,
@@ -35,7 +38,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -45,6 +48,7 @@ import {
   IconTile,
   Page,
   Panel,
+  ResponsiveTabBar,
   SearchField,
   SectionHeader,
   SheetHandle,
@@ -69,6 +73,7 @@ import {
   buildDockerImage,
   clearDockerTasks,
   clearDockerImageUpgradeStatus,
+  checkDockerImagesUpgrade,
   checkDockerContainerUpgrade,
   createDockerContainerGroup,
   createDockerContainer,
@@ -102,6 +107,7 @@ import {
   removeDockerContainer,
   removeDockerContainerGroup,
   removeDockerImage,
+  removeDockerImages,
   removeDockerNetwork,
   removeDockerRegistryMirror,
   removeDockerTask,
@@ -170,6 +176,19 @@ function keyOf(item: LuckyRecord, index: number) {
     ["Id", "ID", "id", "Name", "name", "Key", "key"],
     String(index),
   );
+}
+function imageReferences(item: LuckyRecord) {
+  const references: string[] = [];
+  for (const key of ["RepoTags", "Tags", "repoTags", "tags", "Name", "name"]) {
+    const value = item[key];
+    const candidates = Array.isArray(value)
+      ? value.map(String)
+      : typeof value === "string"
+        ? value.split(",")
+        : [];
+    references.push(...candidates.map((candidate) => candidate.trim()).filter((candidate) => candidate && !/<none>/i.test(candidate)));
+  }
+  return [...new Set(references)];
 }
 function nested(payload: LuckyRecord, keys: string[]) {
   for (const key of keys) {
@@ -518,11 +537,42 @@ function DockerFormEditor({
   );
 }
 
+type DetailState = {
+  title: string;
+  value?: unknown;
+  loading?: boolean;
+  error?: string;
+};
+
+function DockerDetailViewer({ detail, close }: { detail: DetailState; close: () => void }) {
+  const colors = useAppTheme();
+  return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+    <FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.page }}>
+      <View style={{ flex: 1, width: "100%", maxWidth: 820, alignSelf: "center", padding: 18, gap: 14 }}>
+        <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <IconTile icon={Search} size={38} iconSize={19} />
+          <Text numberOfLines={2} style={{ flex: 1, color: colors.text, fontSize: 18, lineHeight: 23, fontWeight: "800" }}>{detail.title}</Text>
+          <Pressable accessibilityLabel="关闭详情" onPress={close} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+            <X color={colors.subtext} size={19} />
+          </Pressable>
+        </View>
+        {detail.loading ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <ActivityIndicator color={colors.primary} size="large" />
+          <Text style={{ color: colors.subtext, fontSize: 13 }}>正在读取详情</Text>
+        </View> : detail.error ? <ErrorState message={detail.error} /> : <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 18 }}>
+          <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+            <StructuredDataView value={detail.value} />
+          </View>
+        </ScrollView>}
+      </View>
+    </FullScreenSafeArea>
+  </Modal>;
+}
+
 export default function DockerScreen() {
   const colors = useAppTheme();
   const isScreenFocused = useIsFocused();
   const params = useLocalSearchParams<{ view?: string; search?: string }>();
-  const tabScrollRef = useRef<ScrollView>(null);
   const requestedView = dockerViewParam(params.view);
   const requestedSearch = stringParam(params.search);
   const [view, setView] = useState<DockerView>(requestedView ?? "containers");
@@ -532,6 +582,10 @@ export default function DockerScreen() {
   const [search, setSearch] = useState(requestedSearch ?? "");
   const deferredSearch = useDeferredValue(search);
   const [editor, setEditor] = useState<Editor>();
+  const [detail, setDetail] = useState<DetailState>();
+  const detailRequestRef = useRef(0);
+  const [imageSelectionMode, setImageSelectionMode] = useState(false);
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
@@ -555,13 +609,6 @@ export default function DockerScreen() {
     });
     return () => subscription.remove();
   }, []);
-  useEffect(() => {
-    const index = tabs.findIndex(([key]) => key === view);
-    const frame = requestAnimationFrame(() => {
-      tabScrollRef.current?.scrollTo({ x: Math.max(0, index * 82 - 70), animated: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [view]);
   const containers = useQuery({
     queryKey: ["docker", "containers"],
     queryFn: listDockerContainers,
@@ -675,6 +722,18 @@ export default function DockerScreen() {
         );
       if (type === "image-pull") return pullDockerImage(value ?? {});
       if (type === "image-remove") return removeDockerImage(key ?? "", true);
+      if (type === "images-remove-batch") {
+        const ids = Array.isArray(value?.ids) ? value.ids.map(String).filter(Boolean) : [];
+        if (!ids.length) throw new Error("未选择要删除的镜像");
+        const result = await removeDockerImages(ids);
+        if (Number(result.removedCount) === 0 && Number(result.failedCount) > 0) {
+          const firstFailure = Array.isArray(result.failed) && result.failed[0] && typeof result.failed[0] === "object"
+            ? String((result.failed[0] as LuckyRecord).error ?? "")
+            : "";
+          throw new Error(firstFailure || "批量删除镜像失败");
+        }
+        return result;
+      }
       if (type === "image-tag")
         return tagDockerImage(
           key ?? "",
@@ -755,11 +814,23 @@ export default function DockerScreen() {
       setLocalError("");
       setLocalNotice("");
     },
-    onSuccess: async () => {
+    onSuccess: async (result, variables) => {
       setEditor(undefined);
       setLocalError("");
       await queryClient.invalidateQueries({ queryKey: ["docker"] });
-      setLocalNotice("操作已完成，数据已刷新");
+      if (variables.type === "images-remove-batch") {
+        const record = result as unknown as LuckyRecord;
+        const removedCount = Number(record.removedCount) || 0;
+        const failedCount = Number(record.failedCount) || 0;
+        const failedIds = Array.isArray(record.failed)
+          ? record.failed.map((item) => item && typeof item === "object" ? String((item as LuckyRecord).item ?? "") : "").filter(Boolean)
+          : [];
+        setSelectedImageIds(failedIds);
+        setImageSelectionMode(Boolean(failedIds.length));
+        setLocalNotice(`已删除 ${removedCount} 个镜像${failedCount ? `，${failedCount} 个删除失败` : ""}`);
+      } else {
+        setLocalNotice("操作已完成，数据已刷新");
+      }
     },
     onError: (error) => {
       setLocalNotice("");
@@ -805,6 +876,38 @@ export default function DockerScreen() {
       (item) => !word || JSON.stringify(item).toLowerCase().includes(word),
     );
   }, [source, deferredSearch]);
+  const imageEntries = useMemo(
+    () => (images.data?.items ?? []).map((item, index) => ({
+      item,
+      id: keyOf(item, index),
+      references: imageReferences(item),
+    })),
+    [images.data?.items],
+  );
+  const visibleImageEntries = useMemo(() => {
+    const word = deferredSearch.trim().toLowerCase();
+    return imageEntries.filter(({ item }) => !word || JSON.stringify(item).toLowerCase().includes(word));
+  }, [deferredSearch, imageEntries]);
+  const imageIdSet = useMemo(() => new Set(imageEntries.map(({ id }) => id)), [imageEntries]);
+  const validSelectedImageIds = useMemo(
+    () => selectedImageIds.filter((id) => imageIdSet.has(id)),
+    [imageIdSet, selectedImageIds],
+  );
+  const selectedImageSet = useMemo(() => new Set(validSelectedImageIds), [validSelectedImageIds]);
+  const visibleImageIds = useMemo(() => visibleImageEntries.map(({ id }) => id), [visibleImageEntries]);
+  const allVisibleImagesSelected = visibleImageIds.length > 0 && visibleImageIds.every((id) => selectedImageSet.has(id));
+  const hasImageUpgradeTargets = validSelectedImageIds.length > 0 || visibleImageEntries.length > 0;
+  useEffect(() => {
+    setSelectedImageIds((current) => {
+      const next = current.filter((id) => imageIdSet.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [imageIdSet]);
+  useEffect(() => {
+    if (view === "images") return;
+    setImageSelectionMode(false);
+    setSelectedImageIds((current) => current.length ? [] : current);
+  }, [view]);
   const containerStatsSource = useMemo(
     () => [containerStats.data, liveContainerStats.data, progressiveContainerStats],
     [containerStats.data, liveContainerStats.data, progressiveContainerStats],
@@ -826,18 +929,82 @@ export default function DockerScreen() {
       { text: "取消", style: "cancel" },
       { text: "继续", style: "destructive", onPress: action },
     ]);
-  async function inspect(kind: "container" | "image" | "task", key: string) {
+  const closeDetail = () => {
+    detailRequestRef.current += 1;
+    setDetail(undefined);
+  };
+  async function openDetail(title: string, request: () => Promise<unknown>) {
+    const requestId = ++detailRequestRef.current;
+    setDetail({ title, loading: true });
     try {
-      const result =
-        kind === "container"
-          ? await getDockerContainer(key)
-          : kind === "image"
-            ? await getDockerImage(key)
-            : await getDockerTask(key);
-      setOutput(result);
+      const value = await request();
+      if (detailRequestRef.current === requestId) setDetail({ title, value });
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "读取失败");
+      if (detailRequestRef.current === requestId) {
+        setDetail({ title, error: error instanceof Error ? error.message : "读取详情失败" });
+      }
     }
+  }
+  function toggleImageSelection(id: string) {
+    if (mutation.isPending) return;
+    setSelectedImageIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }
+  function toggleImageSelectionMode() {
+    if (mutation.isPending) return;
+    setImageSelectionMode((current) => {
+      if (current) setSelectedImageIds([]);
+      return !current;
+    });
+  }
+  function toggleVisibleImageSelection() {
+    if (mutation.isPending || !visibleImageIds.length) return;
+    setSelectedImageIds((current) => {
+      const next = new Set(current.filter((id) => imageIdSet.has(id)));
+      if (visibleImageIds.every((id) => next.has(id))) {
+        visibleImageIds.forEach((id) => next.delete(id));
+      } else {
+        visibleImageIds.forEach((id) => next.add(id));
+      }
+      return [...next];
+    });
+  }
+  async function detectImageUpgrades() {
+    if (mutation.isPending) return;
+    setLocalError("");
+    setLocalNotice("");
+    const targets = validSelectedImageIds.length
+      ? imageEntries.filter((item) => selectedImageSet.has(item.id))
+      : visibleImageEntries;
+    const references = [...new Set(targets.flatMap((item) => item.references))];
+    if (!references.length) {
+      setLocalError("没有可检测升级的镜像标签");
+      return;
+    }
+    await openDetail(`检测镜像升级 · ${references.length} 个标签`, () => checkDockerImagesUpgrade(references));
+  }
+  function removeSelectedImages() {
+    if (mutation.isPending) return;
+    if (!validSelectedImageIds.length) {
+      setLocalError("请先选择要删除的镜像");
+      return;
+    }
+    danger("批量删除镜像", `确定强制删除已选择的 ${validSelectedImageIds.length} 个镜像？`, () =>
+      mutation.mutate({ type: "images-remove-batch", value: { ids: validSelectedImageIds } }),
+    );
+  }
+  async function inspect(kind: "container" | "image" | "task", key: string) {
+    const title = kind === "container" ? "容器详情" : kind === "image" ? "镜像详情" : "任务详情";
+    await openDetail(title, () =>
+        kind === "container"
+          ? getDockerContainer(key)
+          : kind === "image"
+            ? getDockerImage(key)
+            : getDockerTask(key),
+    );
   }
   async function containerLogs(key: string) {
     try {
@@ -928,43 +1095,15 @@ export default function DockerScreen() {
         }
       }}
     >
-      <View style={{ width: "100%", maxWidth: 820, alignSelf: "center", padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
-        <ScrollView ref={tabScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingRight: 4 }}>
-          {tabs.map(([key, label, Icon]) => {
-            const selected = view === key;
-            return <Pressable
-              key={key}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              onPress={() => {
-                setView(key);
-                setSearch("");
-                setOutput("");
-              }}
-              style={({ pressed }) => ({
-                minWidth: 78,
-                height: 44,
-                paddingHorizontal: 10,
-                borderRadius: 12,
-                backgroundColor: selected ? colors.card : "transparent",
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "row",
-                gap: 6,
-                shadowColor: colors.shadow,
-                shadowOpacity: selected && (Platform.OS === "ios" || Platform.OS === "web") ? 0.06 : 0,
-                shadowRadius: 6,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: selected && Platform.OS === "android" ? 1 : 0,
-                opacity: pressed ? 0.62 : 1,
-              })}
-            >
-              <Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} />
-              <Text numberOfLines={1} style={{ color: selected ? colors.primary : colors.subtext, fontSize: 11, fontWeight: selected ? "700" : "600" }}>{label}</Text>
-            </Pressable>;
-          })}
-        </ScrollView>
-      </View>
+      <ResponsiveTabBar
+        tabs={tabs}
+        value={view}
+        onChange={(key) => {
+          setView(key);
+          setSearch("");
+          setOutput("");
+        }}
+      />
       {localError ? <ErrorState message={localError} /> : null}
       {localNotice ? <View style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.successBg, justifyContent: "center" }}><Text style={{ color: colors.success, fontSize: 12, fontWeight: "700" }}>{localNotice}</Text></View> : null}
       {active.error ? (
@@ -1109,7 +1248,6 @@ export default function DockerScreen() {
           ) : !containers.isLoading ? (
             <EmptyState message="暂无容器" icon={Container} />
           ) : null}
-          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1118,7 +1256,7 @@ export default function DockerScreen() {
           <SectionHeader
             icon={Image}
             title="镜像列表"
-            meta={`${filtered.length} 项`}
+            meta={`${visibleImageEntries.length} 项`}
           />
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable
@@ -1165,13 +1303,92 @@ export default function DockerScreen() {
               </Text>
             </Pressable>
           </View>
-          {filtered.length ? (
-            filtered.map((item, index) => {
-              const key = keyOf(item, index);
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={validSelectedImageIds.length ? `检测已选择的 ${validSelectedImageIds.length} 个镜像升级` : `检测当前 ${visibleImageEntries.length} 个镜像升级`}
+              accessibilityState={{ disabled: images.isLoading || !hasImageUpgradeTargets || mutation.isPending }}
+              disabled={images.isLoading || !hasImageUpgradeTargets || mutation.isPending}
+              onPress={() => void detectImageUpgrades()}
+              style={({ pressed }) => ({
+                flex: 1,
+                height: 44,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.primary,
+                backgroundColor: colors.primarySoft,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                opacity: images.isLoading || !hasImageUpgradeTargets || mutation.isPending ? 0.45 : pressed ? 0.62 : 1,
+              })}
+            >
+              <RefreshCw color={colors.primary} size={16} />
+              <Text style={{ color: colors.primary, fontWeight: "800" }}>检测升级</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: imageSelectionMode, disabled: mutation.isPending }}
+              disabled={mutation.isPending}
+              onPress={toggleImageSelectionMode}
+              style={({ pressed }) => ({
+                flex: 1,
+                height: 44,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: imageSelectionMode ? colors.danger : colors.border,
+                backgroundColor: imageSelectionMode ? colors.dangerBg : colors.card,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                opacity: mutation.isPending ? 0.45 : pressed ? 0.62 : 1,
+              })}
+            >
+              <ListChecks color={imageSelectionMode ? colors.danger : colors.text} size={16} />
+              <Text style={{ color: imageSelectionMode ? colors.danger : colors.text, fontWeight: "800" }}>{imageSelectionMode ? "退出批量" : "批量删除"}</Text>
+            </Pressable>
+          </View>
+          {imageSelectionMode ? <View style={{ padding: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, gap: 8 }}>
+            <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>已选择 {validSelectedImageIds.length} 项</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityLabel={allVisibleImagesSelected ? "取消选择当前显示的全部镜像" : "选择当前显示的全部镜像"}
+                accessibilityState={{ checked: allVisibleImagesSelected, disabled: !visibleImageIds.length || mutation.isPending }}
+                disabled={!visibleImageIds.length || mutation.isPending}
+                onPress={toggleVisibleImageSelection}
+                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: !visibleImageIds.length || mutation.isPending ? 0.45 : 1 }}
+              >
+                <ListChecks color={colors.primary} size={15} />
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>{allVisibleImagesSelected ? "取消全选" : "全选"}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`删除已选择的 ${validSelectedImageIds.length} 个镜像`}
+                accessibilityState={{ disabled: !validSelectedImageIds.length || mutation.isPending }}
+                disabled={!validSelectedImageIds.length || mutation.isPending}
+                onPress={removeSelectedImages}
+                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: validSelectedImageIds.length ? colors.dangerBg : colors.muted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: mutation.isPending ? 0.45 : 1 }}
+              >
+                <Trash2 color={validSelectedImageIds.length ? colors.danger : colors.disabled} size={15} />
+                <Text style={{ color: validSelectedImageIds.length ? colors.danger : colors.disabled, fontSize: 12, fontWeight: "700" }}>删除所选</Text>
+              </Pressable>
+            </View>
+          </View> : null}
+          {visibleImageEntries.length ? (
+            visibleImageEntries.map(({ item, id: key }) => {
               const name = pick(item, ["RepoTags", "Tags", "Name"], "<none>");
+              const selected = selectedImageSet.has(key);
               return (
                 <Panel key={key}>
                   <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    {imageSelectionMode ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: mutation.isPending }} accessibilityLabel={`选择镜像 ${name}`} disabled={mutation.isPending} onPress={() => toggleImageSelection(key)} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: mutation.isPending ? 0.45 : 1 }}>
+                      <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: selected ? colors.danger : colors.border, backgroundColor: selected ? colors.danger : colors.card, alignItems: "center", justifyContent: "center" }}>
+                        {selected ? <Check color="#fff" size={15} strokeWidth={2.6} /> : null}
+                      </View>
+                    </Pressable> : null}
                     <IconTile icon={Image} color={colors.warning} background={colors.warningBg} size={38} iconSize={19} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text
@@ -1191,8 +1408,9 @@ export default function DockerScreen() {
                       </Text>
                     </View>
                   </View>
-                  <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                  {!imageSelectionMode ? <>
+                    <View style={{ height: 1, backgroundColor: colors.rowBorder }} />
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
                     <IconButton
                       icon={Search}
                       label="详情"
@@ -1228,7 +1446,8 @@ export default function DockerScreen() {
                         )
                       }
                     />
-                  </View>
+                    </View>
+                  </> : null}
                 </Panel>
               );
             })
@@ -1509,9 +1728,7 @@ export default function DockerScreen() {
                     color={colors.text}
                     fluid
                     basis={120}
-                    onPress={async () =>
-                      setOutput(await listDockerVolumeBackups(name))
-                    }
+                    onPress={() => void openDetail(`备份列表 · ${name}`, () => listDockerVolumeBackups(name))}
                   />
                   <IconButton
                     icon={RotateCw}
@@ -1544,7 +1761,6 @@ export default function DockerScreen() {
               </Panel>
             );
           })}
-          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1612,7 +1828,6 @@ export default function DockerScreen() {
               </Panel>
             );
           })}
-          {output ? <Panel><StructuredDataView value={output} /></Panel> : null}
         </>
       ) : null}
 
@@ -1815,6 +2030,7 @@ export default function DockerScreen() {
         </>
       ) : null}
 
+      {detail ? <DockerDetailViewer detail={detail} close={closeDetail} /> : null}
       {editor ? (
         <DockerFormEditor
           key={`${editor.type}-${editor.key ?? "new"}`}
@@ -1839,13 +2055,14 @@ export default function DockerScreen() {
                 readOperations.includes(operation) ? request : undefined,
                 operation.includes("async") ? 600000 : undefined,
               );
-              setOutput(result);
               setEditor(undefined);
+              setDetail({ title: "文件操作结果", value: result });
               return;
             }
             if (editor.type === "compose-discover") {
-              setOutput(await discoverDockerCompose(String(value.scan_path ?? "")));
+              const result = await discoverDockerCompose(String(value.scan_path ?? ""));
               setEditor(undefined);
+              setDetail({ title: "Compose 扫描结果", value: result });
               return;
             }
             if (editor.type === "compose-config") {
@@ -1887,7 +2104,7 @@ export default function DockerScreen() {
                 { icon: Search, label: "容器详情", color: colors.text, action: () => inspect("container", containerMenu.key) },
                 { icon: FileText, label: "查看日志", color: colors.cyan, action: () => containerLogs(containerMenu.key) },
                 { icon: Folder, label: "管理文件", color: colors.warning, action: () => setEditor({ type: "container-files", title: "容器文件操作", key: containerMenu.key, value: { operation: "list", path: "/" } }) },
-                { icon: Activity, label: "查看进程", color: colors.cyan, action: async () => setOutput(await getDockerContainerProcesses(containerMenu.key)) },
+                { icon: Activity, label: "查看进程", color: colors.cyan, action: () => void openDetail(`容器进程 · ${containerMenu.name}`, () => getDockerContainerProcesses(containerMenu.key)) },
                 { icon: Pencil, label: "编辑配置", color: colors.primary, action: () => editContainer(containerMenu.key) },
                 { icon: Box, label: "重命名", color: colors.primary, action: () => setEditor({ type: "container-rename", title: "重命名容器", key: containerMenu.key, value: { name: containerMenu.name } }) },
                 { icon: Trash2, label: "删除容器", color: colors.danger, action: () => danger("确认删除", `强制删除容器 ${containerMenu.name}？`, () => mutation.mutate({ type: "container-remove", key: containerMenu.key })) },

@@ -46,6 +46,7 @@ import {
   IconTile,
   Page,
   Panel,
+  ResponsiveTabBar,
   SectionHeader,
 } from "@/src/components/lucky-ui";
 import { StructuredDataView, StructuredForm } from "@/src/components/structured-form";
@@ -1507,38 +1508,15 @@ export default function WebServiceScreen() {
       refreshing={activeQuery.isFetching}
       onRefresh={() => activeQuery.refetch()}
     >
-      <View style={{ padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
-          {tabs.map(([key, label, Icon]) => {
-            const selected = view === key;
-            return <Pressable
-              key={key}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              onPress={() => {
-                setView(key);
-                if (key === "logs") setOutput("");
-                setLocalError("");
-              }}
-              style={({ pressed }) => ({
-                minWidth: 78,
-                height: 44,
-                paddingHorizontal: 10,
-                borderRadius: 12,
-                flexDirection: "row",
-                gap: 6,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: selected ? colors.card : "transparent",
-                opacity: pressed ? 0.62 : 1,
-              })}
-            >
-              <Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} />
-              <Text numberOfLines={1} style={{ color: selected ? colors.primary : colors.subtext, fontSize: 11, fontWeight: selected ? "700" : "600" }}>{label}</Text>
-            </Pressable>;
-          })}
-        </ScrollView>
-      </View>
+      <ResponsiveTabBar
+        tabs={tabs}
+        value={view}
+        onChange={(key) => {
+          setView(key);
+          if (key === "logs") setOutput("");
+          setLocalError("");
+        }}
+      />
       {localError ? <ErrorState message={localError} /> : null}
       {activeQuery.error ? (
         <ErrorState

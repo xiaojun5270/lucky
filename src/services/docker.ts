@@ -229,8 +229,9 @@ export const getDockerImage = (id: string) =>
   callDockerApi(`images/${encodeURIComponent(id)}`);
 export const pullDockerImage = (data: LuckyRecord) =>
   callDockerApi("images/pull-async", "POST", data);
-export const removeDockerImage = (reference: string, force = false) =>
-  reference.includes("/") || reference.includes(":")
+export const removeDockerImage = (reference: string, force = false) => {
+  const isImageId = /^(?:sha256:)?[a-f\d]{12,}$/i.test(reference);
+  return !isImageId && (reference.includes("/") || reference.includes(":"))
     ? callDockerApi("images/remove", "DELETE", undefined, {
         tag: reference,
         force,
@@ -242,6 +243,7 @@ export const removeDockerImage = (reference: string, force = false) =>
         undefined,
         { force, noprune: false },
       );
+};
 export const tagDockerImage = (
   id: string,
   repository: string,
@@ -274,6 +276,57 @@ export const getDockerImageFilesystem = (id: string, path = "/") =>
   callDockerApi(`images/${encodeURIComponent(id)}/filesystem`, "GET", undefined, { path });
 export const checkDockerImageUpgrade = (imageRef: string) =>
   callDockerApi("images/upgrade-check", "POST", { image_ref: imageRef }, undefined, 120000);
+
+async function runDockerBatch<T>(items: T[], task: (item: T) => Promise<unknown>, concurrency = 4) {
+  const succeeded: T[] = [];
+  const failed: { item: T; error: string }[] = [];
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      try {
+        await task(item);
+        succeeded.push(item);
+      } catch (error) {
+        failed.push({ item, error: error instanceof Error ? error.message : "请求失败" });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return { succeeded, failed };
+}
+
+export async function removeDockerImages(references: string[]) {
+  const items = [...new Set(references.map((item) => item.trim()).filter(Boolean))];
+  const result = await runDockerBatch(items, (reference) => removeDockerImage(reference, true));
+  return {
+    ret: 0,
+    removed: result.succeeded,
+    failed: result.failed,
+    removedCount: result.succeeded.length,
+    failedCount: result.failed.length,
+  } as LuckyRecord;
+}
+
+export async function checkDockerImagesUpgrade(imageRefs: string[]) {
+  const items = [...new Set(imageRefs.map((item) => item.trim()).filter(Boolean))];
+  const results: LuckyRecord[] = [];
+  const result = await runDockerBatch(items, async (imageRef) => {
+    const response = await checkDockerImageUpgrade(imageRef);
+    results.push({ imageRef, result: response });
+  }, 2);
+  if (!result.succeeded.length && result.failed.length) {
+    throw new Error(result.failed[0].error);
+  }
+  return {
+    ret: 0,
+    checked: results,
+    failed: result.failed,
+    checkedCount: result.succeeded.length,
+    failedCount: result.failed.length,
+  } as LuckyRecord;
+}
+
 export const getDockerImageUpgradeStatus = (imageRef = "") =>
   callDockerApi("images/upgrade-status", "GET", undefined, imageRef ? { image_ref: imageRef } : undefined);
 export const dismissDockerImageUpgrade = (imageRef: string, imageId = "") =>

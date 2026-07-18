@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { ChevronRight, Inbox, RefreshCw, Search, TriangleAlert } from 'lucide-react-native';
 import type { ComponentProps, ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/src/lib/theme';
@@ -36,6 +36,46 @@ export function Page({ title, subtitle, icon: Icon, children, refreshing, onRefr
       {children}
     </ScrollView>
   </SafeAreaView>;
+}
+
+type ResponsiveTab<Key extends string> = readonly [Key, string, LucideIcon];
+
+export function ResponsiveTabBar<Key extends string>({ tabs, value, onChange, maxWidth = 820 }: { tabs: readonly ResponsiveTab<Key>[]; value: Key; onChange: (key: Key) => void; maxWidth?: number }) {
+  const colors = useAppTheme();
+  const { width } = useWindowDimensions();
+  const singleRow = width >= tabs.length * 82 + 40;
+  return <View style={{ width: '100%', maxWidth, alignSelf: 'center', padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+    {tabs.map(([key, label, Icon]) => {
+      const selected = value === key;
+      return <Pressable
+        key={key}
+        accessibilityRole="tab"
+        accessibilityState={{ selected }}
+        onPress={() => onChange(key)}
+        style={({ pressed }) => ({
+          flexGrow: 1,
+          flexShrink: 1,
+          flexBasis: singleRow ? 0 : '30%',
+          minWidth: 0,
+          minHeight: singleRow ? 44 : 56,
+          paddingHorizontal: 6,
+          paddingVertical: singleRow ? 0 : 6,
+          borderRadius: 12,
+          backgroundColor: selected ? colors.card : 'transparent',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: singleRow ? 'row' : 'column',
+          gap: singleRow ? 6 : 3,
+          ...(selected ? surfaceShadow(Platform.OS) : {}),
+          opacity: pressed ? 0.62 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        })}
+      >
+        <Icon color={selected ? colors.primary : colors.subtext} size={16} strokeWidth={selected ? 2.4 : 2.1} />
+        <Text numberOfLines={2} style={{ maxWidth: '100%', color: selected ? colors.primary : colors.subtext, fontSize: 11, lineHeight: 14, fontWeight: selected ? '700' : '600', textAlign: 'center' }}>{label}</Text>
+      </Pressable>;
+    })}
+  </View>;
 }
 
 export function Panel({ children }: { children: ReactNode }) {
