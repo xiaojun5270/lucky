@@ -1,4 +1,15 @@
-import { QueryClient } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
+import { AppState, Platform } from 'react-native';
+
+if (Platform.OS !== 'web') {
+  focusManager.setFocused(AppState.currentState === 'active');
+  focusManager.setEventListener((setFocused) => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      setFocused(state === 'active');
+    });
+    return () => subscription.remove();
+  });
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,18 +1,18 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
-import { Check, ChevronDown, ChevronUp, Container, FileKey2, FileText, FileUp, Globe2, List, Pause, Pencil, Play, Plus, RefreshCw, RotateCw, Save, Settings2, ShieldCheck, Square, Trash2, X } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useIsFocused, useLocalSearchParams } from 'expo-router';
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Container, Ellipsis, FileKey2, FileText, FileUp, Globe2, List, ListOrdered, Pause, Pencil, Play, Plus, RefreshCw, RotateCw, Save, Settings2, ShieldCheck, SlidersHorizontal, Square, Terminal, TestTube, Trash2, Users, Webhook, Wifi, X } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import { EmptyState, ErrorState, FullScreenSafeArea, IconTile, Page, Panel } from '@/src/components/lucky-ui';
 import { StructuredDataView, StructuredForm } from '@/src/components/structured-form';
 import { queryClient } from '@/src/lib/query-client';
 import { useAppTheme } from '@/src/lib/theme';
-import { getServiceDetail, getServiceItems, getServiceLogs, runServiceAction, setServiceEnabled } from '@/src/services/lucky';
-import { createDdnsTask, deleteDdnsTask, getDdnsConfigure, getDdnsTask, updateDdnsConfigure, updateDdnsTask } from '@/src/services/ddns';
-import { createSslCertificate, deleteSslCertificate, getSslCertificate, getSslSetting, getSslSyncClientOptions, updateSslCertificate, updateSslSetting } from '@/src/services/ssl';
+import { getServiceDetail, getServiceItems, getServiceLastLogs, getServiceLogs, runServiceAction, setServiceEnabled } from '@/src/services/lucky';
+import { createDdnsTask, deleteDdnsRecord, deleteDdnsTask, getDdnsConfigure, getDdnsOdhcpdClients, getDdnsTask, reorderDdnsRecords, reorderDdnsTasks, setDdnsRecordOption, testDdnsIpCommand, testDdnsWebhook, updateDdnsConfigure, updateDdnsTask } from '@/src/services/ddns';
+import { cancelSslAcme, createSslCertificate, deleteSslCertificate, getSslCertificate, getSslSetting, getSslSyncClientOptions, reorderSslCertificates, updateSslCertificate, updateSslSetting } from '@/src/services/ssl';
 import type { LuckyListItem, LuckyRecord, LuckyServiceKind } from '@/src/types/lucky';
 
 const config = {
@@ -38,14 +38,34 @@ function itemKey(item: LuckyListItem, index: number) {
 
 function isEnabled(item: LuckyListItem) {
   const value: unknown = (item as LuckyRecord).Enable ?? (item as LuckyRecord).enable ?? (item as LuckyRecord).Enabled;
-  return value !== false && value !== 0 && value !== 'false';
+  if (value === false || value === 0) return false;
+  return typeof value !== 'string' || !/^(?:false|0|off|no|disabled)$/i.test(value.trim());
+}
+
+function isAcmeIssuing(item: LuckyRecord) {
+  const sources = [item, childRecord(item, 'data'), childRecord(item, 'ssl'), childRecord(item, 'ExtParams')];
+  for (const source of sources) {
+    const value = source.ACMEing ?? source.Acmeing ?? source.acmeing ?? source.ACMEInProgress ?? source.acmeInProgress;
+    if (value === true || value === 1) return true;
+    if (typeof value === 'string' && /^(?:true|1|yes|running|pending|issuing|processing|in[_ -]?progress)$/i.test(value.trim())) return true;
+  }
+  return false;
 }
 
 function detailValue(payload?: LuckyRecord) {
   if (!payload) return {};
-  const nested = [payload.data, payload.rule, payload.task, payload.container, payload.ssl]
-    .find((value) => value && typeof value === 'object' && !Array.isArray(value));
-  return (nested ?? payload) as LuckyRecord;
+  const keys = ['rule', 'task', 'container', 'ssl', 'certificate', 'cert', 'configure', 'setting', 'data', 'result'];
+  let value = payload;
+  const visited = new Set<object>();
+  for (let depth = 0; depth < 6 && !visited.has(value); depth += 1) {
+    visited.add(value);
+    const nested = keys
+      .map((key) => value[key])
+      .find((item): item is LuckyRecord => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+    if (!nested) break;
+    value = nested;
+  }
+  return value;
 }
 
 function editableValue(payload: LuckyRecord) {
@@ -61,16 +81,234 @@ function childRecord(item: LuckyRecord, key: string) {
 }
 
 function sslSummary(item: LuckyRecord) {
-  const certs = childRecord(item, 'CertsInfo');
+  const rawCerts = item.CertsInfo;
+  const certs = Array.isArray(rawCerts)
+    ? rawCerts.find((value): value is LuckyRecord => Boolean(value) && typeof value === 'object' && !Array.isArray(value)) ?? {}
+    : childRecord(item, 'CertsInfo');
   const ext = childRecord(item, 'ExtParams');
   const domains = Array.isArray(certs.Domains)
     ? certs.Domains.map(String)
-    : Array.isArray(ext.acmeDomains)
-      ? ext.acmeDomains.map(String)
-      : [];
+    : Array.isArray(item.Domains)
+      ? item.Domains.map(String)
+      : Array.isArray(ext.acmeDomains)
+        ? ext.acmeDomains.map(String)
+        : [];
   const type = pick(item, ['AddFrom', 'Type'], 'file');
-  const expiry = pick(certs, ['NotAfterTime', 'NotAfter', 'ExpireTime'], pick(item, ['ExpireTime', 'UpdateTime']));
+  const expiry = pick(certs, ['NotAfterTime', 'NotAfter', 'ExpireTime'], pick(item, ['ExpireTime', 'UpdateTime'], ''));
   return [type.toUpperCase(), domains.join(', '), expiry ? `到期 ${expiry}` : ''].filter(Boolean).join(' · ');
+}
+
+function recordItems(value?: LuckyRecord) {
+  if (!value) return [] as LuckyRecord[];
+  const candidates: unknown[] = [value.Records, value.records, value.RecordList, value.recordList, childRecord(value, 'data').Records];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate.filter((item): item is LuckyRecord => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+  }
+  return [] as LuckyRecord[];
+}
+
+function recordKey(item: LuckyRecord, index: number) {
+  return pick(item, ['RecordKey', 'recordKey', 'Key', 'key', 'ID', 'Id', 'id', 'Name', 'name', 'Domain', 'domain'], String(index));
+}
+
+function recordLabel(item: LuckyRecord, index: number) {
+  const domain = pick(item, ['Domain', 'domain', 'FQDN', 'RecordName', 'Name', 'name'], '记录');
+  const type = pick(item, ['Type', 'type', 'RecordType', 'recordType'], '');
+  const value = pick(item, ['Value', 'value', 'IPv4', 'IPv6', 'Address', 'address'], '');
+  return [domain, type, value].filter((part) => part && part !== '--').join(' · ') || `记录 ${index + 1}`;
+}
+
+function resultText(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(resultText).filter(Boolean).join('\n');
+  if (typeof value === 'object') {
+    const record = value as LuckyRecord;
+    for (const key of ['result', 'output', 'Output', 'ip', 'IP', 'data', 'logs', 'LastLogs', 'text', 'Text', 'msg', 'message']) {
+      if (record[key] !== undefined && record[key] !== null) {
+        const text: string = resultText(record[key]);
+        if (text) return text;
+      }
+    }
+    return Object.entries(record)
+      .map(([key, item]) => {
+        const text = resultText(item);
+        return text ? `${key}: ${text.replace(/\n/g, '\n  ')}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return String(value);
+}
+
+type ServiceAdvancedSheetProps = {
+  kind: 'ddns' | 'ssl';
+  itemKeyValue: string;
+  name: string;
+  item: LuckyRecord;
+  orderKeys: string[];
+  onClose: () => void;
+  onChanged: () => void;
+  onReorderTasks: (keys: string[]) => Promise<void>;
+  onShowLogs: () => void;
+};
+
+function ServiceAdvancedSheet({ kind, itemKeyValue, name, item, orderKeys, onClose, onChanged, onReorderTasks, onShowLogs }: ServiceAdvancedSheetProps) {
+  const colors = useAppTheme();
+  const [records, setRecords] = useState<LuckyRecord[]>(() => recordItems(item));
+  const [option, setOption] = useState('enable');
+  const [ipType, setIpType] = useState('IPv4');
+  const [command, setCommand] = useState('');
+  const [operationError, setOperationError] = useState('');
+  const [operationResult, setOperationResult] = useState('');
+  const [clientsOpen, setClientsOpen] = useState(false);
+  const [order, setOrder] = useState(orderKeys);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState('');
+  const detailQuery = useQuery({
+    queryKey: ['lucky', 'service', kind, 'advanced-detail', itemKeyValue],
+    queryFn: ({ signal }) => kind === 'ddns' ? getDdnsTask(itemKeyValue, signal) : getSslCertificate(itemKeyValue, signal),
+  });
+  const clientsQuery = useQuery({
+    queryKey: ['lucky', 'service', 'ddns', 'odhcpd-clients'],
+    queryFn: ({ signal }) => getDdnsOdhcpdClients(signal),
+    enabled: kind === 'ddns' && clientsOpen,
+  });
+  const detail = useMemo(() => detailQuery.data ? editableValue(detailQuery.data) : item, [detailQuery.data, item]);
+  useEffect(() => setRecords(recordItems(detail)), [detail]);
+  useEffect(() => setOrder(orderKeys), [orderKeys]);
+  const inputStyle = { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, color: colors.text, paddingHorizontal: 12 } as const;
+  const clients = useMemo(() => {
+    const payload = clientsQuery.data;
+    if (!payload) return [] as LuckyRecord[];
+    const candidates = [payload.clients, payload.list, payload.data, payload.result];
+    for (const candidate of candidates) if (Array.isArray(candidate)) return candidate.filter((entry): entry is LuckyRecord => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry));
+    return [] as LuckyRecord[];
+  }, [clientsQuery.data]);
+
+  async function perform(label: string, task: () => Promise<unknown>) {
+    setActionBusy(label);
+    setOperationError('');
+    setOperationResult('');
+    try {
+      const result = await task();
+      setOperationResult(resultText(result) || '操作成功');
+      onChanged();
+      return true;
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : '请求失败');
+      return false;
+    } finally {
+      setActionBusy('');
+    }
+  }
+
+  async function moveRecord(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= records.length || actionBusy) return;
+    const next = records.slice();
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setRecords(next);
+    const keys = next.map((entry, entryIndex) => recordKey(entry, entryIndex));
+    const succeeded = await perform('reorder-record', () => reorderDdnsRecords(itemKeyValue, keys));
+    if (!succeeded) setRecords(records);
+  }
+
+  function removeRecord(entry: LuckyRecord, index: number) {
+    const key = recordKey(entry, index);
+    Alert.alert('删除记录', `确定删除“${recordLabel(entry, index)}”吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => perform('delete-record', async () => {
+        await deleteDdnsRecord(itemKeyValue, key);
+        setRecords((current) => current.filter((_, currentIndex) => currentIndex !== index));
+        return '记录已删除';
+      }) },
+    ]);
+  }
+
+  function changeRecordOption(entry: LuckyRecord, index: number) {
+    const key = recordKey(entry, index);
+    if (!option.trim()) return setOperationError('请输入记录选项');
+    void perform('record-option', () => setDdnsRecordOption(itemKeyValue, key, option.trim()));
+  }
+
+  function moveTask(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= order.length || orderBusy) return;
+    const next = order.slice();
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setOrder(next);
+    setOrderBusy(true);
+    setOperationError('');
+    onReorderTasks(next).catch((error) => {
+      setOrder(order);
+      setOperationError(error instanceof Error ? error.message : '排序失败');
+    }).finally(() => setOrderBusy(false));
+  }
+
+  function cancelAcme() {
+    Alert.alert('取消 ACME 签发', `确定取消“${name}”当前的证书签发吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '取消签发', style: 'destructive', onPress: () => void perform('cancel-acme', () => cancelSslAcme(itemKeyValue)) },
+    ]);
+  }
+
+  function testCommand() {
+    if (!command.trim()) return setOperationError('请输入要测试的命令');
+    void perform('test-command', () => testDdnsIpCommand(ipType, command.trim()));
+  }
+
+  function testWebhook() {
+    void perform('test-webhook', () => testDdnsWebhook(itemKeyValue, detail));
+  }
+
+  return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.page }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={{ flex: 1, padding: 18, gap: 13 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><IconTile icon={SlidersHorizontal} size={38} iconSize={19} /><View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 19, fontWeight: '800' }}>高级操作</Text><Text numberOfLines={1} style={{ color: colors.subtext, fontSize: 12, marginTop: 2 }}>{name}</Text></View><Pressable accessibilityLabel="关闭" onPress={onClose} style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={19} /></Pressable></View>
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 13, paddingBottom: 24 }} style={{ flex: 1 }}>
+            {detailQuery.isLoading ? <Panel><Text style={{ color: colors.subtext }}>正在读取详细配置...</Text></Panel> : null}
+            {detailQuery.error ? <ErrorState message={detailQuery.error.message} retry={() => detailQuery.refetch()} /> : null}
+            {operationError ? <ErrorState message={operationError} /> : null}
+            {operationResult ? <Panel><Text style={{ color: colors.success, fontWeight: '700' }}>操作结果</Text><Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 }}>{operationResult}</Text></Panel> : null}
+            <Panel>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ListOrdered color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>任务顺序</Text><Text style={{ color: colors.subtext, fontSize: 12 }}>{order.length} 项</Text></View>
+              {order.length ? order.map((key, index) => <View key={`${key}-${index}`} style={{ minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}><Text numberOfLines={1} style={{ flex: 1, color: key === itemKeyValue ? colors.primary : colors.text, fontSize: 13 }}>{key === itemKeyValue ? `${index + 1}. ${name}` : `${index + 1}. ${key}`}</Text><Pressable accessibilityLabel="上移" disabled={index === 0 || orderBusy} onPress={() => moveTask(index, -1)} style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><ArrowUp color={index === 0 ? colors.disabled : colors.text} size={16} /></Pressable><Pressable accessibilityLabel="下移" disabled={index === order.length - 1 || orderBusy} onPress={() => moveTask(index, 1)} style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><ArrowDown color={index === order.length - 1 ? colors.disabled : colors.text} size={16} /></Pressable></View>) : <Text style={{ color: colors.subtext }}>暂无排序数据</Text>}
+            </Panel>
+            {kind === 'ddns' ? <>
+              <Panel>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ListOrdered color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>DNS 记录</Text><Text style={{ color: colors.subtext, fontSize: 12 }}>{records.length} 项</Text></View>
+                {records.length ? records.slice(0, 100).map((entry, index) => <View key={`${recordKey(entry, index)}-${index}`} style={{ gap: 8, paddingVertical: 9, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Text numberOfLines={2} style={{ flex: 1, color: colors.text, fontSize: 13, lineHeight: 18 }}>{recordLabel(entry, index)}</Text><Pressable accessibilityLabel="上移记录" disabled={index === 0 || Boolean(actionBusy)} onPress={() => void moveRecord(index, -1)} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><ArrowUp color={index === 0 ? colors.disabled : colors.text} size={15} /></Pressable><Pressable accessibilityLabel="下移记录" disabled={index === records.length - 1 || Boolean(actionBusy)} onPress={() => void moveRecord(index, 1)} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><ArrowDown color={index === records.length - 1 ? colors.disabled : colors.text} size={15} /></Pressable><Pressable accessibilityLabel="删除记录" disabled={Boolean(actionBusy)} onPress={() => removeRecord(entry, index)} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: 'center', justifyContent: 'center' }}><Trash2 color={colors.danger} size={15} /></Pressable></View><View style={{ flexDirection: 'row', gap: 8 }}><TextInput value={option} onChangeText={setOption} placeholder="选项，如 enable" placeholderTextColor={colors.placeholder} autoCapitalize="none" style={[inputStyle, { flex: 1, minHeight: 40, fontSize: 12 }]} /><Pressable disabled={Boolean(actionBusy)} onPress={() => changeRecordOption(entry, index)} style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>应用选项</Text></Pressable></View></View>) : <Text style={{ color: colors.subtext }}>当前任务没有记录</Text>}
+                {records.length > 100 ? <Text style={{ color: colors.subtext, fontSize: 12 }}>仅显示前 100 条记录，请在编辑器中继续管理。</Text> : null}
+              </Panel>
+              <Panel>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Terminal color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>IP 命令测试</Text><TestTube color={colors.subtext} size={16} /></View>
+                <View style={{ flexDirection: 'row', gap: 8 }}><Pressable onPress={() => setIpType((current) => current === 'IPv4' ? 'IPv6' : 'IPv4')} style={[inputStyle, { flex: 0.35, justifyContent: 'center' }]}><Text style={{ color: colors.text, textAlign: 'center' }}>{ipType}</Text></Pressable><TextInput value={command} onChangeText={setCommand} placeholder="输入获取 IP 的命令" placeholderTextColor={colors.placeholder} autoCapitalize="none" autoCorrect={false} style={[inputStyle, { flex: 1 }]} /><Pressable disabled={Boolean(actionBusy)} onPress={testCommand} style={{ minWidth: 64, minHeight: 44, borderRadius: 11, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{actionBusy === 'test-command' ? '测试中' : '测试'}</Text></Pressable></View>
+              </Panel>
+              <Panel>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Webhook color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>Webhook 测试</Text></View>
+                <Text style={{ color: colors.subtext, fontSize: 12, lineHeight: 18 }}>使用当前任务配置发送一次测试请求，不会改变任务内容。</Text>
+                <Pressable disabled={Boolean(actionBusy)} onPress={testWebhook} style={{ height: 44, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Webhook color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>{actionBusy === 'test-webhook' ? '发送中...' : '发送测试'}</Text></Pressable>
+              </Panel>
+              <Panel>
+                <Pressable onPress={() => setClientsOpen((current) => !current)} style={{ minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8 }}><Wifi color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>odhcpd 客户端</Text>{clientsOpen ? <ChevronUp color={colors.subtext} size={17} /> : <ChevronDown color={colors.subtext} size={17} />}</Pressable>
+                {clientsOpen ? clientsQuery.isLoading ? <Text style={{ color: colors.subtext }}>正在读取客户端...</Text> : clientsQuery.error ? <ErrorState message={clientsQuery.error.message} retry={() => clientsQuery.refetch()} /> : clients.length ? clients.slice(0, 100).map((client, index) => <View key={`${pick(client, ['Mac', 'MAC', 'mac', 'IP', 'ip', 'Hostname', 'hostname'], String(index))}-${index}`} style={{ minHeight: 40, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, flexDirection: 'row', alignItems: 'center', gap: 8 }}><Users color={colors.subtext} size={15} /><Text numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 13 }}>{pick(client, ['Hostname', 'hostname', 'Name', 'name', 'IP', 'ip'], '客户端')}</Text><Text style={{ color: colors.subtext, fontSize: 12 }}>{pick(client, ['Mac', 'MAC', 'mac', 'IP', 'ip'], '--')}</Text></View>) : <Text style={{ color: colors.subtext }}>暂无客户端</Text> : null}
+              </Panel>
+            </> : <Panel>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><ShieldCheck color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>ACME 操作</Text></View>
+              {isAcmeIssuing(detail) ? <Pressable disabled={Boolean(actionBusy)} onPress={cancelAcme} style={{ height: 44, borderRadius: 11, backgroundColor: colors.dangerBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><X color={colors.danger} size={16} /><Text style={{ color: colors.danger, fontWeight: '800' }}>{actionBusy === 'cancel-acme' ? '取消中...' : '取消 ACME 签发'}</Text></Pressable> : <Text style={{ color: colors.subtext }}>当前没有正在签发的 ACME 任务。</Text>}
+            </Panel>}
+            <Panel>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><FileText color={colors.primary} size={18} /><Text style={{ flex: 1, color: colors.text, fontWeight: '800' }}>运行日志</Text></View>
+              <Pressable onPress={onShowLogs} style={{ height: 44, borderRadius: 11, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><FileText color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>查看分页日志</Text></Pressable>
+            </Panel>
+          </ScrollView>
+          <Pressable onPress={onClose} style={{ height: 48, borderRadius: 13, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#fff', fontWeight: '800' }}>完成</Text></Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </FullScreenSafeArea>
+  </Modal>;
 }
 
 type ServiceEditor = { type: 'item' | 'settings'; title: string; value: LuckyRecord; key?: string };
@@ -80,11 +318,13 @@ function ServiceFormEditor({ editor, busy, close, save }: { editor: ServiceEdito
   const [value, setValue] = useState(() => JSON.parse(JSON.stringify(editor.value)) as LuckyRecord);
   return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
     <FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.card }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={{ flex: 1, width: '100%', backgroundColor: colors.card, padding: 18, gap: 13 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={Settings2} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>{editor.title}</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 4 }} style={{ flex: 1 }}><StructuredForm value={value} onChange={setValue} /></ScrollView>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 12, paddingBottom: 4 }} style={{ flex: 1 }}><StructuredForm value={value} onChange={setValue} /></ScrollView>
         <Pressable disabled={busy} onPress={() => save(value)} style={{ height: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中' : '保存'}</Text></Pressable>
       </View>
+      </KeyboardAvoidingView>
     </FullScreenSafeArea>
   </Modal>;
 }
@@ -177,13 +417,14 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
 
   return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
     <FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.card }}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={{ flex: 1, width: '100%', backgroundColor: colors.card, padding: 18, gap: 13 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} />
           <Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>添加证书</Text>
           <Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable>
         </View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
           <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>证书备注</Text><TextInput value={remark} onChangeText={setRemark} placeholder="可留空" placeholderTextColor={colors.placeholder} style={inputStyle} /></View>
           <View style={{ gap: 7 }}>
             <Text style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>添加方式</Text>
@@ -205,6 +446,7 @@ function SslCertificateEditor({ busy, syncClients, close, save }: { busy: boolea
         </ScrollView>
         <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy || Boolean(fileBusy)} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 12, backgroundColor: busy || fileBusy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Plus color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '添加中...' : '添加'}</Text></Pressable></View>
       </View>
+      </KeyboardAvoidingView>
     </FullScreenSafeArea>
   </Modal>;
 }
@@ -291,9 +533,9 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
     save({ ...initial, Remark: remark.trim(), AddFrom: 'acme', Domains: domains, ExtParams: { ...ext, [existingKey(['acmeDomains', 'Domains'])]: domains }, SyncAllClients: syncAll, SyncClients: syncKeys, SyncInfo: { ...initialSync, SyncAllClients: syncAll, SyncClients: syncKeys } });
   }
 
-  return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}><FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.card }}><View style={{ flex: 1, width: '100%', backgroundColor: colors.card, padding: 18, gap: 13 }}>
+  return <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}><FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.card }}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}><View style={{ flex: 1, width: '100%', backgroundColor: colors.card, padding: 18, gap: 13 }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><IconTile icon={ShieldCheck} color={colors.success} background={colors.successBg} size={36} iconSize={18} /><Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' }}>编辑证书</Text><Pressable accessibilityLabel="关闭" onPress={close} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center' }}><X color={colors.subtext} size={18} /></Pressable></View>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 13, paddingBottom: 4 }} style={{ flex: 1 }}>
       <View style={{ gap: 7 }}><Text style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>证书备注</Text><TextInput value={remark} onChangeText={setRemark} style={inputStyle} /></View>
       {SelectField({ label: '添加方式', keys: ['AddFrom'], options: [{ label: 'ACME', value: 'acme' }] })}
       {SelectField({ label: '证书颁发机构', keys: ['acmeCA', 'ACMECA', 'CA'], options: [{ label: "Let's Encrypt", value: 'letsencrypt' }, { label: 'ZeroSSL', value: 'zerossl' }, { label: 'Google Trust Services', value: 'google' }, { label: '自定义 ACME', value: 'custom' }] })}
@@ -315,7 +557,7 @@ function SslAcmeEditor({ editor, busy, syncClients, close, save }: { editor: Ser
       {error ? <ErrorState message={error} /> : null}
     </ScrollView>
     <View style={{ flexDirection: 'row', gap: 8 }}><Pressable disabled={busy} onPress={close} style={{ flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontWeight: '700' }}>取消</Text></Pressable><Pressable disabled={busy} onPress={submit} style={{ flex: 1.35, height: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 }}><Save color="#fff" size={17} /><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? '保存中...' : '修改'}</Text></Pressable></View>
-  </View></FullScreenSafeArea></Modal>;
+  </View></KeyboardAvoidingView></FullScreenSafeArea></Modal>;
 }
 
 export default function ServiceDetailScreen() {
@@ -326,24 +568,30 @@ export default function ServiceDetailScreen() {
   const [view, setView] = useState<'list' | 'logs'>('list');
   const [selectedKey, setSelectedKey] = useState('');
   const [logKey, setLogKey] = useState<string>();
+  const [logPage, setLogPage] = useState(1);
+  const [logMode, setLogMode] = useState<'page' | 'recent'>('page');
   const [ddnsEditor, setDdnsEditor] = useState<ServiceEditor>();
   const [sslEditor, setSslEditor] = useState<ServiceEditor>();
   const [sslAddOpen, setSslAddOpen] = useState(false);
+  const [advanced, setAdvanced] = useState<{ key: string; name: string; item: LuckyRecord }>();
+  const isFocused = useIsFocused();
   const logsEnabled = view === 'logs';
-  const query = useQuery({ queryKey: ['lucky', 'service', kind], queryFn: () => getServiceItems(kind) });
+  const query = useQuery({ queryKey: ['lucky', 'service', kind], queryFn: ({ signal }) => getServiceItems(kind, signal) });
   const detailQuery = useQuery({
     queryKey: ['lucky', 'service', kind, 'detail', selectedKey],
-    queryFn: () => getServiceDetail(kind, selectedKey),
+    queryFn: ({ signal }) => getServiceDetail(kind, selectedKey, signal),
     enabled: Boolean(selectedKey),
   });
   const logsQuery = useQuery({
-    queryKey: ['lucky', 'service', kind, 'logs', logKey],
-    queryFn: () => getServiceLogs(kind, logKey),
-    enabled: logsEnabled,
+    queryKey: ['lucky', 'service', kind, 'logs', logKey, logPage, logMode],
+    queryFn: ({ signal }) => logMode === 'recent' ? getServiceLastLogs(kind, logKey, signal) : getServiceLogs(kind, logKey, signal, logPage),
+    enabled: logsEnabled && isFocused,
+    refetchInterval: logsEnabled && isFocused && (logMode === 'recent' || logPage === 1) ? 10000 : false,
+    refetchIntervalInBackground: false,
   });
   const sslSyncClients = useQuery({
     queryKey: ['lucky', 'service', 'ssl', 'sync-clients'],
-    queryFn: getSslSyncClientOptions,
+    queryFn: ({ signal }) => getSslSyncClientOptions(signal),
     enabled: kind === 'ssl' && (sslAddOpen || sslEditor?.type === 'item'),
   });
   const mutation = useMutation({
@@ -444,10 +692,33 @@ export default function ServiceDetailScreen() {
 
   function showLogs(key?: string) {
     setLogKey(key);
+    setLogPage(1);
+    setLogMode('page');
     setView('logs');
   }
 
-  return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} safeTop={false} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
+  function openAdvanced(key: string, name: string, item: LuckyRecord) {
+    setAdvanced({ key, name, item });
+  }
+
+  function openOrdering() {
+    const first = query.data?.items?.[0];
+    if (!first) return Alert.alert('暂无项目', '请先添加一项配置');
+    const key = itemKey(first, 0);
+    const name = pick(first, kind === 'ssl' ? ['Remark', 'remark', 'Name', 'name'] : ['Name', 'name', 'TaskName', 'taskName', 'DDNSTaskName'], '项目 1');
+    openAdvanced(key, name, first);
+  }
+
+  async function reorderServiceTasks(keys: string[]) {
+    if (kind === 'ddns') {
+      await reorderDdnsTasks(keys);
+    } else {
+      await reorderSslCertificates(keys);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['lucky', 'service', kind] });
+  }
+
+  return <Page title={meta.title} subtitle={meta.subtitle} icon={meta.icon} safeTop={false} scrollable={false} refreshing={query.isFetching || logsQuery.isFetching} onRefresh={() => view === 'logs' && logsEnabled ? logsQuery.refetch() : query.refetch()}>
     <View style={{ padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.mutedCard, flexDirection: 'row', gap: 4 }}>
       {([['list', '列表', List], ['logs', '日志', FileText]] as const).map(([value, label, Icon]) => {
         const selected = view === value;
@@ -459,27 +730,59 @@ export default function ServiceDetailScreen() {
     {sslMutation.error ? <ErrorState message={sslMutation.error.message} /> : null}
 
     {view === 'logs' ? <>
-      {logKey ? <Pressable onPress={() => setLogKey(undefined)}><Text style={{ color: colors.primary, fontWeight: '700' }}>查看模块日志</Text></Pressable> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {logKey ? <Pressable onPress={() => { setLogKey(undefined); setLogPage(1); }} style={{ minHeight: 36, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.mutedCard, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>查看模块日志</Text></Pressable> : null}
+        <Pressable onPress={() => { setLogMode((current) => current === 'recent' ? 'page' : 'recent'); setLogPage(1); }} style={{ minHeight: 36, paddingHorizontal: 10, borderRadius: 9, backgroundColor: logMode === 'recent' ? colors.primarySoft : colors.mutedCard, flexDirection: 'row', alignItems: 'center', gap: 5 }}><RotateCw color={logMode === 'recent' ? colors.primary : colors.subtext} size={14} /><Text style={{ color: logMode === 'recent' ? colors.primary : colors.subtext, fontWeight: '700', fontSize: 12 }}>{logMode === 'recent' ? '最近日志' : '分页日志'}</Text></Pressable>
+      </View>
       {logsEnabled && logsQuery.error ? <ErrorState message={logsQuery.error.message} retry={() => logsQuery.refetch()} /> : null}
-      {logsEnabled && logsQuery.data?.lines.length ? <Panel>{logsQuery.data.lines.map((line, index) => <Text key={`${index}-${line.slice(0, 16)}`} selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 11, lineHeight: 18 }}>{line}</Text>)}</Panel> : logsEnabled && !logsQuery.isLoading && !logsQuery.error ? <EmptyState message="暂无日志" /> : null}
+      {logsEnabled ? <FlatList
+        data={logsQuery.data?.lines ?? []}
+        keyExtractor={(line, index) => `${index}-${line.slice(0, 24)}`}
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={Platform.OS === 'android'}
+        initialNumToRender={30}
+        maxToRenderPerBatch={30}
+        windowSize={9}
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{ paddingBottom: 98, flexGrow: logsQuery.data?.lines.length ? 0 : 1 }}
+        ListEmptyComponent={!logsQuery.isLoading && !logsQuery.error ? <EmptyState message="暂无日志" /> : null}
+        renderItem={({ item: line, index }) => <Text selectable style={{ color: colors.text, fontFamily: 'monospace', fontSize: 11, lineHeight: 18, paddingHorizontal: 12, paddingVertical: 6, borderTopWidth: index ? 1 : 0, borderTopColor: colors.rowBorder, backgroundColor: colors.card }}>{line}</Text>}
+        ListFooterComponent={logsQuery.data?.lines.length ? <Text style={{ color: colors.subtext, fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>本页显示 {logsQuery.data.lines.length} 行</Text> : null}
+      /> : null}
+      {logsEnabled && logMode === 'page' ? <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12 }}><Pressable accessibilityLabel="上一页日志" disabled={logPage <= 1 || logsQuery.isFetching} onPress={() => setLogPage((page) => Math.max(1, page - 1))} style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: logPage <= 1 ? colors.muted : colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><ChevronLeft color={logPage <= 1 ? colors.disabled : colors.primary} size={18} /></Pressable><Text style={{ minWidth: 82, color: colors.subtext, fontSize: 12, textAlign: 'center' }}>{logsQuery.data?.total === undefined ? `第 ${logPage} 页` : `${logPage} / ${Math.max(1, Math.ceil(logsQuery.data.total / logsQuery.data.pageSize))}`}</Text><Pressable accessibilityLabel="下一页日志" disabled={logsQuery.isFetching || !logsQuery.data?.hasMore} onPress={() => setLogPage((page) => page + 1)} style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: !logsQuery.data?.hasMore ? colors.muted : colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><ChevronRight color={!logsQuery.data?.hasMore ? colors.disabled : colors.primary} size={18} /></Pressable></View> : null}
     </> : <>
       {query.error ? <ErrorState message={query.error.message} retry={() => query.refetch()} /> : null}
       {kind === 'ddns' ? <View style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => setDdnsEditor({ type: 'item', title: '添加 DDNS 任务', value: { TaskName: '', Enable: true, Records: [] } })} style={{ flex: 1, height: 46, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加任务</Text></Pressable>
         <Pressable onPress={editDdnsConfigure} style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
+        <Pressable accessibilityLabel="排序和测试工具" onPress={openOrdering} style={{ width: 82, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}><ListOrdered color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>排序</Text></Pressable>
       </View> : null}
       {kind === 'ssl' ? <View style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => setSslAddOpen(true)} style={{ flex: 1, height: 46, borderRadius: 12, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Plus color="#fff" size={16} /><Text style={{ color: '#fff', fontWeight: '800' }}>添加证书</Text></Pressable>
         <Pressable onPress={editSslSetting} style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Settings2 color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800' }}>模块设置</Text></Pressable>
+        <Pressable accessibilityLabel="证书排序" onPress={openOrdering} style={{ width: 82, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}><ListOrdered color={colors.primary} size={16} /><Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>排序</Text></Pressable>
       </View> : null}
-      {query.data?.items.length ? query.data.items.map((item, index) => {
+      <FlatList
+        data={query.data?.items ?? []}
+        keyExtractor={(item, index) => itemKey(item, index)}
+        extraData={`${selectedKey}:${mutation.isPending}:${detailQuery.dataUpdatedAt}`}
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={Platform.OS === 'android'}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        style={{ flex: 1, width: '100%' }}
+        contentContainerStyle={{ paddingBottom: 98, flexGrow: query.data?.items.length ? 0 : 1 }}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        ListEmptyComponent={!query.isLoading && !query.error ? <EmptyState message="接口未返回列表数据" /> : null}
+        renderItem={({ item, index }) => {
         const key = itemKey(item, index);
         const expanded = selectedKey === key;
         const name = pick(item, kind === 'ssl' ? ['Remark', 'remark', 'Name', 'name'] : ['Name', 'name', 'TaskName', 'taskName', 'DDNSTaskName', 'Names', 'Domain', 'Domains'], `项目 ${index + 1}`);
-        const status = Boolean(item.ACMEing) ? '签发中' : pick(item, ['Status', 'status', 'State', 'state', 'LastResult'], isEnabled(item) ? '正常' : '已停用');
+        const status = isAcmeIssuing(item) ? '签发中' : pick(item, ['Status', 'status', 'State', 'state', 'LastResult'], isEnabled(item) ? '正常' : '已停用');
         const detail = kind === 'docker' ? pick(item, ['Image', 'image', 'ImageName']) : kind === 'ssl' ? sslSummary(item) : kind === 'ddns' ? pick(item, ['Domain', 'Domains', 'DNSProvider', 'Provider', 'LastRun', 'LastSyncTime']) : pick(item, ['BackendURL', 'ProxyURL', 'Listen', 'Domains']);
-        const sslIsSyncSource = kind === 'ssl' && pick(item, ['AddFrom', 'Type'], 'file').toLowerCase() === 'sync';
-        return <Panel key={key}>
+        const sslIsSyncSource = kind === 'ssl' && pick(item, ['AddFrom', 'Type'], 'file').trim().toLowerCase() === 'sync';
+        return <Panel>
           <Pressable onPress={() => setSelectedKey(expanded ? '' : key)} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
             <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>{name}</Text><Text numberOfLines={2} style={{ color: colors.subtext, fontSize: 12, marginTop: 5 }}>{detail}</Text></View>
             <View style={{ alignItems: 'flex-end', gap: 8 }}><Text style={{ color: /run|正常|success|active|up/i.test(status) ? colors.success : colors.subtext, fontSize: 12 }}>{status}</Text>{expanded ? <ChevronUp color={colors.subtext} size={17} /> : <ChevronDown color={colors.subtext} size={17} />}</View>
@@ -488,24 +791,37 @@ export default function ServiceDetailScreen() {
           {kind === 'docker' ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
             ['start', '启动', Play], ['stop', '停止', Square], ['restart', '重启', RotateCw], ['pause', '暂停', Pause], ['unpause', '恢复', Play],
           ].map(([action, label, Icon]) => <Pressable key={String(action)} disabled={mutation.isPending} onPress={() => confirmAction(key, String(action), String(label))} style={{ width: '31%', minWidth: 82, height: 38, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><Icon color={colors.text} size={15} /><Text style={{ color: colors.text, fontSize: 12 }}>{String(label)}</Text></Pressable>)}</View> : kind === 'ddns' ? <View style={{ flexDirection: 'row', gap: 7 }}>
-            <Pressable disabled={mutation.isPending} onPress={() => confirmAction(key, sslIsSyncSource ? 'sync' : 'flush', sslIsSyncSource ? '证书同步' : '刷新证书')} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><RefreshCw color="#fff" size={15} /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{sslIsSyncSource ? '同步' : '刷新'}</Text></Pressable>
+            <Pressable disabled={mutation.isPending} onPress={() => confirmAction(key, 'sync', '手动同步')} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><RefreshCw color="#fff" size={15} /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>同步</Text></Pressable>
             <Pressable onPress={() => editDdnsTask(key)} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><Pencil color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>编辑</Text></Pressable>
             <Pressable onPress={() => removeDdnsTask(key, name)} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><Trash2 color={colors.danger} size={15} /><Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>删除</Text></Pressable>
           </View> : kind === 'ssl' ? <View style={{ flexDirection: 'row', gap: 7 }}>
-            <Pressable disabled={mutation.isPending} onPress={() => confirmAction(key, 'sync', '手动同步')} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><RefreshCw color="#fff" size={15} /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>同步</Text></Pressable>
+            <Pressable disabled={mutation.isPending} onPress={() => confirmAction(key, sslIsSyncSource ? 'sync' : 'flush', sslIsSyncSource ? '同步证书' : '刷新证书')} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><RefreshCw color="#fff" size={15} /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{sslIsSyncSource ? '同步' : '刷新'}</Text></Pressable>
             <Pressable onPress={() => editSslCertificate(key)} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><Pencil color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>编辑</Text></Pressable>
             <Pressable onPress={() => removeSslCertificate(key, name)} style={{ flex: 1, height: 40, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 }}><Trash2 color={colors.danger} size={15} /><Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>删除</Text></Pressable>
           </View> : null}
+          {kind === 'ddns' || kind === 'ssl' ? <Pressable accessibilityLabel="更多操作" onPress={() => openAdvanced(key, name, item)} style={{ height: 38, borderRadius: 9, backgroundColor: colors.mutedCard, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}><Ellipsis color={colors.primary} size={17} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>更多操作</Text></Pressable> : null}
           {kind === 'docker' || kind === 'ssl' ? <Pressable onPress={() => showLogs(key)} style={{ height: 38, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}><FileText color={colors.primary} size={15} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>查看日志</Text></Pressable> : null}
           {expanded ? <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, gap: 8 }}>
             {detailQuery.error ? <ErrorState message={detailQuery.error.message} retry={() => detailQuery.refetch()} /> : null}
             {detailQuery.data ? <StructuredDataView value={detailValue(detailQuery.data)} /> : null}
           </View> : null}
         </Panel>;
-      }) : !query.isLoading && !query.error ? <EmptyState message="接口未返回列表数据" /> : null}
+        }}
+      />
     </>}
     {ddnsEditor ? <ServiceFormEditor key={`${ddnsEditor.type}-${ddnsEditor.key ?? 'new'}`} editor={ddnsEditor} busy={ddnsMutation.isPending} close={() => setDdnsEditor(undefined)} save={(value) => ddnsMutation.mutate({ editor: ddnsEditor, value })} /> : null}
     {sslAddOpen ? <SslCertificateEditor busy={sslMutation.isPending} syncClients={sslSyncClients.data ?? []} close={() => setSslAddOpen(false)} save={(value) => sslMutation.mutate({ editor: { type: 'item', title: '添加 SSL 证书', value }, value })} /> : null}
     {sslEditor && sslEditor.type === 'item' && pick(sslEditor.value, ['AddFrom', 'Type'], 'file').toLowerCase() === 'acme' ? <SslAcmeEditor key={sslEditor.key} editor={sslEditor} busy={sslMutation.isPending} syncClients={sslSyncClients.data ?? []} close={() => setSslEditor(undefined)} save={(value) => sslMutation.mutate({ editor: sslEditor, value })} /> : sslEditor ? <ServiceFormEditor key={`${sslEditor.type}-${sslEditor.key ?? 'new'}`} editor={sslEditor} busy={sslMutation.isPending} close={() => setSslEditor(undefined)} save={(value) => sslMutation.mutate({ editor: sslEditor, value })} /> : null}
+    {advanced ? <ServiceAdvancedSheet
+      kind={kind === 'ssl' ? 'ssl' : 'ddns'}
+      itemKeyValue={advanced.key}
+      name={advanced.name}
+      item={advanced.item}
+      orderKeys={(query.data?.items ?? []).map((entry, index) => itemKey(entry, index))}
+      onClose={() => setAdvanced(undefined)}
+      onChanged={() => { void queryClient.invalidateQueries({ queryKey: ['lucky', 'service', kind] }); }}
+      onReorderTasks={reorderServiceTasks}
+      onShowLogs={() => { setAdvanced(undefined); showLogs(advanced.key); }}
+    /> : null}
   </Page>;
 }

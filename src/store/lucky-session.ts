@@ -52,7 +52,7 @@ export async function hydrateLuckySession() {
     const raw = await readSession();
     if (raw) {
       const saved = JSON.parse(raw) as Partial<PersistedSession>;
-      luckySessionState.baseUrl = saved.baseUrl?.trim().replace(/\/$/, '') ?? '';
+      luckySessionState.baseUrl = saved.baseUrl?.trim().replace(/\/+$/, '') ?? '';
       luckySessionState.account = saved.account ?? '';
       luckySessionState.password = saved.password ?? '';
       luckySessionState.token = saved.token ?? '';
@@ -65,7 +65,7 @@ export async function hydrateLuckySession() {
 }
 
 export async function saveLuckySession(session: PersistedSession) {
-  const normalized = { ...session, baseUrl: session.baseUrl.trim().replace(/\/$/, '') };
+  const normalized = { ...session, baseUrl: session.baseUrl.trim().replace(/\/+$/, '') };
   Object.assign(luckySessionState, normalized);
   await writeSession(JSON.stringify(normalized));
 }

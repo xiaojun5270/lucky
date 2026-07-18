@@ -65,7 +65,7 @@ if (new Set(endpoints.map((item) => item.id)).size !== endpoints.length) throw n
 if (checkOnly) {
   const current = await readFile(outputPath, 'utf8');
   if (current !== content) throw new Error('Generated endpoint registry is stale. Run npm run generate:endpoints.');
-  console.log(`Coverage OK: ${endpoints.length} endpoints, ${methodCount} methods, ${modules.length} modules.`);
+  console.log(`Endpoint registry OK: ${endpoints.length} endpoints, ${methodCount} methods, ${modules.length} modules.`);
 } else {
   await mkdir(resolve(root, 'src', 'api'), { recursive: true });
   await writeFile(outputPath, content, 'utf8');

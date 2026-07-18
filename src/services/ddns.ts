@@ -49,12 +49,12 @@ function extractTasks(payload: LuckyRecord): LuckyListItem[] {
   return bestScore > 0 ? best as LuckyListItem[] : [];
 }
 
-export async function getDdnsTasks() {
-  const raw = await luckyFetch("/api/ddnstasklist");
+export async function getDdnsTasks(signal?: AbortSignal) {
+  const raw = await luckyFetch("/api/ddnstasklist", { signal });
   return { items: extractTasks(raw), raw };
 }
 
-export const getDdnsTask = (key: string) => luckyFetch(`/api/ddns/task/${encodeURIComponent(key)}`);
+export const getDdnsTask = (key: string, signal?: AbortSignal) => luckyFetch(`/api/ddns/task/${encodeURIComponent(key)}`, { signal });
 export const createDdnsTask = (value: LuckyRecord) => luckyFetch("/api/ddns", { method: "POST", body: JSON.stringify(value) });
 export const updateDdnsTask = (key: string, value: LuckyRecord) =>
   luckyFetch(`/api/ddns${query({ key })}`, { method: "PUT", body: JSON.stringify(value) });
@@ -66,14 +66,14 @@ export const setDdnsTaskExpanded = (key: string, expanded: boolean) =>
 export const setDdnsIpSectionExpanded = (key: string, expanded: boolean) =>
   luckyFetch(`/api/ddns/ipsectionexpanded${query({ expanded, key })}`);
 export const syncDdnsTask = (key: string) => luckyFetch(`/api/ddns/manualSync/${encodeURIComponent(key)}`);
-export const getDdnsConfigure = () => luckyFetch("/api/ddns/configure");
+export const getDdnsConfigure = (signal?: AbortSignal) => luckyFetch("/api/ddns/configure", { signal });
 export const updateDdnsConfigure = (value: LuckyRecord) =>
   luckyFetch("/api/ddns/configure", { method: "PUT", body: JSON.stringify(value) });
-export const getDdnsOdhcpdClients = () => luckyFetch("/api/ddns/odhcpdclients");
-export const testDdnsIpCommand = (iptype: string, command: string) =>
-  luckyFetch(`/api/ddns/getipfromcmdtest${query({ iptype, command })}`);
-export const testDdnsWebhook = (key: string, value: LuckyRecord) =>
-  luckyFetch(`/api/ddns/webhooktest${query({ key })}`, { method: "POST", body: JSON.stringify(value) });
+export const getDdnsOdhcpdClients = (signal?: AbortSignal) => luckyFetch("/api/ddns/odhcpdclients", { signal });
+export const testDdnsIpCommand = (iptype: string, command: string, signal?: AbortSignal) =>
+  luckyFetch(`/api/ddns/getipfromcmdtest${query({ iptype, command })}`, { signal });
+export const testDdnsWebhook = (key: string, value: LuckyRecord, signal?: AbortSignal) =>
+  luckyFetch(`/api/ddns/webhooktest${query({ key })}`, { method: "POST", body: JSON.stringify(value), signal });
 export const reorderDdnsTasks = (keys: unknown) =>
   luckyFetch("/api/ddns/taskorderadjustment", { method: "PUT", body: JSON.stringify(keys) });
 export const reorderDdnsRecords = (taskKey: string, keys: unknown) =>
@@ -82,6 +82,6 @@ export const deleteDdnsRecord = (taskKey: string, recordKey: string) =>
   luckyFetch(`/api/ddns/${encodeURIComponent(taskKey)}/${encodeURIComponent(recordKey)}`, { method: "DELETE" });
 export const setDdnsRecordOption = (taskKey: string, recordKey: string, option: string) =>
   luckyFetch(`/api/ddns/${encodeURIComponent(taskKey)}/${encodeURIComponent(recordKey)}/option/${encodeURIComponent(option)}`, { method: "PUT" });
-export const getDdnsLogs = (pageSize = 100, page = 1) =>
-  luckyFetch(`/api/ddns/logs${query({ pageSize, page })}`);
-export const getDdnsLastLogs = () => luckyFetch("/api/ddns/lastlogs");
+export const getDdnsLogs = (pageSize = 100, page = 1, signal?: AbortSignal) =>
+  luckyFetch(`/api/ddns/logs${query({ pageSize, page })}`, { signal });
+export const getDdnsLastLogs = (signal?: AbortSignal) => luckyFetch("/api/ddns/lastlogs", { signal });

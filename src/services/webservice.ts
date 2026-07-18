@@ -23,21 +23,117 @@ function isRecord(value: unknown): value is LuckyRecord {
 }
 
 function list(payload: LuckyRecord, keys: string[]) {
-  for (const source of [payload, payload.data, payload.result]) {
-    if (Array.isArray(source))
-      return source.filter(isRecord) as LuckyListItem[];
-    if (!isRecord(source)) continue;
-    for (const key of keys)
-      if (Array.isArray(source[key]))
-        return (source[key] as unknown[]).filter(isRecord) as LuckyListItem[];
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const wrappers = /^(?:data|result|response|payload)$/i;
+  const queue: Array<{ value: unknown; depth: number; allowArray: boolean }> = [
+    { value: payload, depth: 0, allowArray: true },
+  ];
+  const visited = new Set<object>();
+  let emptyMatch: LuckyListItem[] | undefined;
+  while (queue.length) {
+    const { value, depth, allowArray } = queue.shift()!;
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      const records = value.filter(isRecord) as LuckyListItem[];
+      if (allowArray && records.length) return records;
+      if (allowArray) emptyMatch ??= records;
+      if (depth < 5) value.forEach((item) => queue.push({ value: item, depth: depth + 1, allowArray: false }));
+      continue;
+    }
+    const source = value as LuckyRecord;
+    for (const [key, candidate] of Object.entries(source)) {
+      if (!wanted.has(key.toLowerCase()) || !Array.isArray(candidate)) continue;
+      const records = candidate.filter(isRecord) as LuckyListItem[];
+      if (records.length) return records;
+      emptyMatch ??= records;
+    }
+    if (depth >= 5) continue;
+    const nested = Object.entries(source)
+      .filter(([, candidate]) => Boolean(candidate) && typeof candidate === "object")
+      .sort(([left], [right]) => Number(!wrappers.test(left)) - Number(!wrappers.test(right)));
+    nested.forEach(([key, candidate]) => queue.push({
+      value: candidate,
+      depth: depth + 1,
+      allowArray: wrappers.test(key),
+    }));
   }
-  return [];
+  return emptyMatch ?? [];
 }
 
 function record(payload: LuckyRecord, keys: string[]) {
-  for (const key of keys)
-    if (isRecord(payload[key])) return payload[key] as LuckyRecord;
-  return payload;
+  let value: LuckyRecord = payload;
+  for (const wantedKey of keys) {
+    const queue: Array<{ value: LuckyRecord; depth: number }> = [{ value: payload, depth: 0 }];
+    const visited = new Set<object>();
+    let found: LuckyRecord | undefined;
+    while (queue.length && !found) {
+      const current = queue.shift()!;
+      if (visited.has(current.value)) continue;
+      visited.add(current.value);
+      for (const [key, candidate] of Object.entries(current.value)) {
+        if (key.toLowerCase() === wantedKey.toLowerCase() && isRecord(candidate)) {
+          found = candidate;
+          break;
+        }
+      }
+      if (current.depth >= 5) continue;
+      for (const candidate of Object.values(current.value)) {
+        if (isRecord(candidate)) queue.push({ value: candidate, depth: current.depth + 1 });
+      }
+    }
+    if (found) {
+      value = found;
+      break;
+    }
+  }
+  const result = { ...value };
+  delete result.ret;
+  delete result.msg;
+  return result;
+}
+
+const WEB_SERVICE_GROUP_COUNT_CONCURRENCY = 4;
+const WEB_SERVICE_GROUP_COUNT_KEYS = new Set([
+  "subrulecount",
+  "subrulenum",
+  "subrulescount",
+  "rulecount",
+  "rulescount",
+  "count",
+]);
+
+function toCount(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value))
+    return Math.max(0, Math.trunc(value));
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : undefined;
+}
+
+function webServiceGroupSubRuleCount(value: LuckyRecord) {
+  const queue: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  const visited = new Set<object>();
+  while (queue.length) {
+    const current = queue.shift()!;
+    const source = current.value;
+    const directCount = toCount(source);
+    if (directCount !== undefined) return directCount;
+    if (!isRecord(source) || visited.has(source)) continue;
+    visited.add(source);
+    for (const [key, rawCount] of Object.entries(source)) {
+      if (!WEB_SERVICE_GROUP_COUNT_KEYS.has(key.toLowerCase())) continue;
+      const count = toCount(rawCount);
+      if (count !== undefined) return count;
+    }
+    if (current.depth >= 4) continue;
+    for (const candidate of Object.values(source)) {
+      if (candidate && typeof candidate === "object") {
+        queue.push({ value: candidate, depth: current.depth + 1 });
+      }
+    }
+  }
+  return undefined;
 }
 
 export const newWebServiceDefaultProxy = (): LuckyRecord => ({
@@ -112,13 +208,13 @@ export const newWebServiceSubRule = (): LuckyRecord => ({
   OtherParams: { WebAuth: false },
 });
 
-export async function getWebServiceCorazaInstances() {
-  const payload = await luckyFetch("/api/coraza/instancelist");
+export async function getWebServiceCorazaInstances({ signal }: { signal?: AbortSignal } = {}) {
+  const payload = await luckyFetch("/api/coraza/instancelist", { signal });
   return list(payload, ["list", "instanceList", "instances"]);
 }
 
-export async function getWebServiceIpFilterRules() {
-  const payload = await luckyFetch("/api/ipfliter/list");
+export async function getWebServiceIpFilterRules({ signal }: { signal?: AbortSignal } = {}) {
+  const payload = await luckyFetch("/api/ipfliter/list", { signal });
   return list(payload, ["list", "rules", "ruleList"]);
 }
 
@@ -139,9 +235,10 @@ export const newWebServiceCgi = (): LuckyRecord => ({
   FileExtensions: ".php",
 });
 
-export async function getWebServiceRules(lite = false) {
+export async function getWebServiceRules(lite = false, signal?: AbortSignal) {
   const payload = await luckyFetch(
     lite ? "/api/webservice/rules_lite" : "/api/webservice/rules",
+    { signal },
   );
   return { items: list(payload, ["rules", "ruleList", "list"]), raw: payload };
 }
@@ -194,29 +291,60 @@ export function setWebServiceSubRuleEnabled(ruleKey: string, subKey: string, ena
   return getWebServiceSubRuleOption(ruleKey, subKey, String(enabled));
 }
 
-export async function getWebServiceGroups() {
-  const payload = await luckyFetch("/api/webservice/groups");
+export async function getWebServiceGroups(
+  { signal, includeCounts = false }: { signal?: AbortSignal; includeCounts?: boolean } = {},
+) {
+  const payload = await luckyFetch("/api/webservice/groups", { signal });
   const items = list(payload, ["groups", "groupList", "list"]);
-  const enriched = await Promise.all(
-    items.map(async (item) => {
-      const key = typeof item.Key === "string" ? item.Key : "";
-      if (!key) return item;
+  if (!includeCounts) return { items, raw: payload };
+  const enriched = items.map((item) => {
+    const count = webServiceGroupSubRuleCount(item);
+    return count === undefined ? item : { ...item, subRuleCount: count };
+  });
+  const missingIndexes = enriched.flatMap((item, index) => {
+    const key = typeof item.Key === "string"
+      ? item.Key
+      : typeof item.key === "string"
+        ? item.key
+        : "";
+    return key && webServiceGroupSubRuleCount(item) === undefined ? [index] : [];
+  });
+  let cursor = 0;
+  const fillMissingCounts = async () => {
+    while (cursor < missingIndexes.length) {
+      const index = missingIndexes[cursor++];
+      const item = enriched[index];
+      const key = typeof item.Key === "string"
+        ? item.Key
+        : typeof item.key === "string"
+          ? item.key
+          : "";
       try {
-        const count = await getWebServiceGroupSubRuleCount(key);
-        return {
-          ...item,
-          subRuleCount: count.count ?? count.subRuleCount ?? 0,
-        };
-      } catch {
-        return item;
+        const response = await getWebServiceGroupSubRuleCount(key, signal);
+        const count = webServiceGroupSubRuleCount(response);
+        if (count !== undefined) enriched[index] = { ...item, subRuleCount: count };
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        // A failed count request must not hide the remaining groups.
       }
-    }),
+    }
+  };
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.min(
+          WEB_SERVICE_GROUP_COUNT_CONCURRENCY,
+          missingIndexes.length,
+        ),
+      },
+      fillMissingCounts,
+    ),
   );
   return { items: enriched, raw: payload };
 }
 
-export async function getWebServiceGroupOptions() {
-  const payload = await luckyFetch("/api/webservice/groups");
+export async function getWebServiceGroupOptions({ signal }: { signal?: AbortSignal } = {}) {
+  const payload = await luckyFetch("/api/webservice/groups", { signal });
   return list(payload, ["list", "groups", "groupList"]);
 }
 
@@ -240,9 +368,13 @@ export function deleteWebServiceGroup(key: string) {
   });
 }
 
-export function getWebServiceGroupSubRuleCount(groupKey: string) {
+export function getWebServiceGroupSubRuleCount(
+  groupKey: string,
+  signal?: AbortSignal,
+) {
   return luckyFetch(
     `/api/webservice/groups/subrulecount${query({ groupKey })}`,
+    { signal },
   );
 }
 
@@ -253,18 +385,8 @@ export function reorderWebServiceGroups(keys: string[]) {
   });
 }
 
-export function reorderWebServiceGroupSubRules(
-  ruleKey: string,
-  value: unknown,
-) {
-  return luckyFetch(
-    `/api/webservice/${encodeURIComponent(ruleKey)}/subrulegrouporderupdate`,
-    { method: "PUT", body: json(value) },
-  );
-}
-
-export async function getWebServiceCgiList() {
-  const payload = await luckyFetch("/api/webservice/cgi/list");
+export async function getWebServiceCgiList({ signal }: { signal?: AbortSignal } = {}) {
+  const payload = await luckyFetch("/api/webservice/cgi/list", { signal });
   return {
     items: list(payload, ["list", "cgiList", "instances"]),
     raw: payload,
@@ -298,8 +420,8 @@ export function setWebServiceCgiEnabled(key: string, enabled: boolean) {
   );
 }
 
-export async function getWebServiceSettings() {
-  const payload = await luckyFetch("/api/webservice/modulesettings/frontend");
+export async function getWebServiceSettings({ signal }: { signal?: AbortSignal } = {}) {
+  const payload = await luckyFetch("/api/webservice/modulesettings/frontend", { signal });
   return record(payload, ["settings", "data"]);
 }
 
@@ -310,12 +432,12 @@ export function updateWebServiceSettings(value: LuckyRecord) {
   });
 }
 
-export function getWebServiceLogs(pageSize = 100, page = 1) {
-  return luckyFetch(`/api/webservice/logs${query({ pageSize, page })}`);
+export function getWebServiceLogs(pageSize = 100, page = 1, signal?: AbortSignal) {
+  return luckyFetch(`/api/webservice/logs${query({ pageSize, page })}`, { signal });
 }
 
-export function getWebServiceLastLogs() {
-  return luckyFetch("/api/webservice/lastlogs");
+export function getWebServiceLastLogs({ signal }: { signal?: AbortSignal } = {}) {
+  return luckyFetch("/api/webservice/lastlogs", { signal });
 }
 
 export function getWebServiceRuleLogs(
@@ -323,15 +445,22 @@ export function getWebServiceRuleLogs(
   subKey: string,
   pageSize = 100,
   page = 1,
+  signal?: AbortSignal,
 ) {
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/${encodeURIComponent(subKey)}/logs${query({ pageSize, page })}`,
+    { signal },
   );
 }
 
-export function getWebServiceRuleLastLogs(ruleKey: string, subKey: string) {
+export function getWebServiceRuleLastLogs(
+  ruleKey: string,
+  subKey: string,
+  signal?: AbortSignal,
+) {
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/${encodeURIComponent(subKey)}/lastlogs`,
+    { signal },
   );
 }
 
@@ -340,9 +469,11 @@ export function getWebServiceAccessDetails(
   subKey: string,
   pageSize = 100,
   page = 1,
+  signal?: AbortSignal,
 ) {
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/${encodeURIComponent(subKey)}/accessdetail${query({ pageSize, page })}`,
+    { signal },
   );
 }
 
@@ -351,9 +482,11 @@ export function getWebServiceCorazaLogs(
   subKey: string,
   pageSize = 100,
   page = 1,
+  signal?: AbortSignal,
 ) {
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/${encodeURIComponent(subKey)}/corazalogs${query({ pageSize, page })}`,
+    { signal },
   );
 }
 
@@ -361,9 +494,11 @@ export function getWebServiceHttpLogs(
   ruleKey: string,
   pageSize = 100,
   page = 1,
+  signal?: AbortSignal,
 ) {
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/httpserver/logs${query({ pageSize, page })}`,
+    { signal },
   );
 }
 
@@ -380,7 +515,7 @@ export function flushWebServiceCache(ruleKey: string, subKey: string) {
   );
 }
 
-export type WebServiceUploadFile = Blob | { uri: string; name: string; type?: string };
+export type WebServiceUploadFile = Blob | { uri: string; name: string; type?: string; file?: Blob };
 
 export function uploadWebServiceFolder(
   ruleKey: string,
@@ -388,8 +523,10 @@ export function uploadWebServiceFolder(
   mountIndex: number,
   file: WebServiceUploadFile,
 ) {
+  if (typeof FormData === "undefined") throw new Error("当前运行环境不支持文件上传");
   const data = new FormData();
-  data.append('file', file as Blob);
+  const browserFile = typeof file === 'object' && file !== null && 'file' in file ? file.file : undefined;
+  data.append('file', (browserFile ?? file) as Blob);
   data.append('mountIndex', String(mountIndex));
   return luckyFetch(
     `/api/webservice/${encodeURIComponent(ruleKey)}/${encodeURIComponent(subKey)}/updatefolder/upload`,
@@ -411,8 +548,8 @@ export function cancelWebServiceFolderUpdate(ruleKey: string, subKey: string, te
   );
 }
 
-export function getWebServiceTipInfo() {
-  return luckyFetch("/api/webservice/tipinfo");
+export function getWebServiceTipInfo({ signal }: { signal?: AbortSignal } = {}) {
+  return luckyFetch("/api/webservice/tipinfo", { signal });
 }
 
 export function markWebServiceTipRead(version: string) {

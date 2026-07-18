@@ -2,6 +2,7 @@ import { luckyFetch } from "@/src/lib/lucky-fetch";
 import type { LuckyListItem, LuckyRecord } from "@/src/types/lucky";
 
 type DockerMethod = "GET" | "POST" | "PUT" | "DELETE";
+type DockerSignalInput = AbortSignal | { signal?: AbortSignal };
 
 function isRecord(value: unknown): value is LuckyRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -22,11 +23,24 @@ function encodeQuery(params?: LuckyRecord) {
 }
 
 function findArray(payload: LuckyRecord, keys: string[]) {
-  for (const source of [payload, payload.data, payload.result]) {
-    if (Array.isArray(source)) return source;
-    if (!isRecord(source)) continue;
-    for (const key of keys)
-      if (Array.isArray(source[key])) return source[key] as unknown[];
+  const wrappers = new Set(["data", "result", "response", "payload"]);
+  for (const wantedKey of keys) {
+    const wanted = wantedKey.toLowerCase();
+    const queue: unknown[] = [payload];
+    const visited = new Set<object>();
+    while (queue.length) {
+      const source = queue.shift();
+      if (Array.isArray(source)) return source;
+      if (!isRecord(source) || visited.has(source)) continue;
+      visited.add(source);
+      for (const [key, value] of Object.entries(source)) {
+        if (key.toLowerCase() === wanted && Array.isArray(value)) return value;
+      }
+      for (const [key, value] of Object.entries(source)) {
+        if (isRecord(value)) queue.push(value);
+        else if (Array.isArray(value) && wrappers.has(key.toLowerCase())) queue.push(value);
+      }
+    }
   }
   return undefined;
 }
@@ -82,6 +96,7 @@ export function callDockerApi(
   params?: LuckyRecord,
   timeoutMs?: number,
   signal?: AbortSignal,
+  responseType: "auto" | "json" | "text" | "blob" = "auto",
 ) {
   return luckyFetch(
     `/api/docker/${path.replace(/^\//, "")}${encodeQuery(params)}`,
@@ -95,16 +110,22 @@ export function callDockerApi(
             : JSON.stringify(data),
       timeoutMs,
       signal,
+      responseType,
     },
   );
 }
 
-export async function listDockerContainers() {
+function resolveDockerSignal(input?: DockerSignalInput) {
+  return isAbortSignal(input) ? input : input?.signal;
+}
+
+export async function listDockerContainers(input?: DockerSignalInput) {
+  const signal = resolveDockerSignal(input);
   const raw = await callDockerApi("containers", "GET", undefined, {
     all: true,
     includeStats: false,
     includeNetworkMode: true,
-  });
+  }, undefined, signal);
   return { items: list(raw, ["containers", "list"]), raw };
 }
 export const getDockerContainer = (id: string) =>
@@ -112,7 +133,7 @@ export const getDockerContainer = (id: string) =>
 export const createDockerContainer = (data: LuckyRecord) =>
   callDockerApi("containers", "POST", data);
 export const editDockerContainer = (id: string, data: LuckyRecord) =>
-  callDockerApi(`containers/${encodeURIComponent(id)}/edit`, "POST", data);
+  callDockerApi(`containers/${encodeURIComponent(id)}/edit`, "POST", data, undefined, 300000);
 export const removeDockerContainer = (
   id: string,
   force = false,
@@ -133,21 +154,87 @@ export const runDockerContainerAction = (
   callDockerApi(
     `containers/${encodeURIComponent(id)}/${action}`,
     "POST",
-    action === "stop" || action === "restart" ? { timeout: 10 } : {},
+    action === "stop" || action === "restart" ? { timeout: 10 } : undefined,
   );
 export const getDockerContainerLogs = (id: string, tail = 200) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/logs`, "GET", undefined, {
     tail,
     timestamps: true,
   });
-export const getDockerContainerStats = (id: string) =>
-  callDockerApi(`containers/${encodeURIComponent(id)}/stats-cached`);
-export const getDockerContainerLiveStats = (id: string) =>
-  callDockerApi(`containers/${encodeURIComponent(id)}/stats`, "GET", undefined, undefined, 10000);
+export const getDockerContainerStats = (id: string, input?: DockerSignalInput) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/stats-cached`, "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerContainerLiveStats = (id: string, input?: DockerSignalInput) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/stats`, "GET", undefined, undefined, 10000, resolveDockerSignal(input));
 export const getDockerContainerProcesses = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/processes`);
-export const getAllDockerContainerStats = () =>
-  callDockerApi("containers/stats-cached", "GET", undefined, undefined, 15000);
+export const getAllDockerContainerStats = (input?: DockerSignalInput) =>
+  callDockerApi("containers/stats-cached", "GET", undefined, undefined, 15000, resolveDockerSignal(input));
+
+export type DockerContainerFileOperation =
+  | "list"
+  | "read"
+  | "write"
+  | "delete"
+  | "mkdir"
+  | "touch"
+  | "rename"
+  | "copy"
+  | "chmod"
+  | "search"
+  | "compress"
+  | "compress-async"
+  | "decompress"
+  | "decompress-async"
+  | "preview-archive";
+
+const dockerContainerFileMethods: Record<DockerContainerFileOperation, DockerMethod> = {
+  list: "GET",
+  read: "GET",
+  write: "POST",
+  delete: "DELETE",
+  mkdir: "POST",
+  touch: "POST",
+  rename: "POST",
+  copy: "POST",
+  chmod: "POST",
+  search: "POST",
+  compress: "POST",
+  "compress-async": "POST",
+  decompress: "POST",
+  "decompress-async": "POST",
+  "preview-archive": "GET",
+};
+
+export function runDockerContainerFileOperation(
+  id: string,
+  operation: string,
+  data: LuckyRecord,
+) {
+  if (!Object.prototype.hasOwnProperty.call(dockerContainerFileMethods, operation)) {
+    throw new Error(`不支持的容器文件操作：${operation || "空"}`);
+  }
+  const typedOperation = operation as DockerContainerFileOperation;
+  const method = dockerContainerFileMethods[typedOperation];
+  const path = typedOperation === "delete"
+    ? `containers/${encodeURIComponent(id)}/files`
+    : `containers/${encodeURIComponent(id)}/files/${typedOperation}`;
+  const readOnly = method === "GET";
+  const longRunning = typedOperation.includes("compress") || typedOperation.includes("decompress");
+  return callDockerApi(
+    path,
+    method,
+    readOnly ? undefined : data,
+    readOnly ? data : undefined,
+    longRunning ? 600000 : undefined,
+  );
+}
+
+export const uploadDockerContainerFile = (id: string, data: FormData) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/files/upload`, "POST", data, undefined, 600000);
+export const downloadDockerContainerFile = (id: string, path: string) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/files/download`, "GET", undefined, { path }, 600000, undefined, "blob");
+export const exportDockerContainer = (id: string) =>
+  callDockerApi(`containers/${encodeURIComponent(id)}/export`, "POST", undefined, undefined, 600000, undefined, "blob");
 
 function containerText(item: LuckyRecord, keys: string[]) {
   for (const key of keys) {
@@ -158,23 +245,68 @@ function containerText(item: LuckyRecord, keys: string[]) {
   return "";
 }
 
-export async function refreshDockerContainerStats(onProgress?: (payload: LuckyRecord) => void) {
-  const { items } = await listDockerContainers();
+type DockerContainerInput = LuckyListItem[] | { items?: LuckyListItem[]; signal?: AbortSignal } | AbortSignal;
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return Boolean(value)
+    && typeof value === "object"
+    && typeof (value as AbortSignal).aborted === "boolean"
+    && typeof (value as AbortSignal).addEventListener === "function";
+}
+
+function resolveDockerContainerInput(input: DockerContainerInput | undefined) {
+  if (Array.isArray(input)) return { items: input, signal: undefined as AbortSignal | undefined };
+  if (isAbortSignal(input)) return { items: undefined, signal: input };
+  return { items: input?.items, signal: input?.signal };
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  const error = new Error("Request cancelled");
+  error.name = "AbortError";
+  throw error;
+}
+
+export async function refreshDockerContainerStats(
+  onProgress?: (payload: LuckyRecord) => void,
+  containerInput?: DockerContainerInput,
+  signal?: AbortSignal,
+) {
+  const resolved = resolveDockerContainerInput(containerInput);
+  const requestSignal = signal ?? resolved.signal;
+  throwIfAborted(requestSignal);
+  const items = resolved.items ?? (await listDockerContainers(requestSignal)).items;
+  throwIfAborted(requestSignal);
   const targets = items.map((item) => {
     const id = containerText(item, ["Id", "ID", "id", "ContainerID", "ContainerId"]);
     const name = containerText(item, ["Names", "Name", "name", "ContainerName"]).replace(/^\/+/, "");
-    const state = [item.State, item.state, item.Status, item.status].filter(Boolean).join(" ").toLowerCase();
-    return { id, name, running: /running|active|\bup\b|paused|restarting/.test(state) };
+    const runningValue = item.Running ?? item.running;
+    const normalizedRunning = typeof runningValue === "string"
+      ? runningValue.trim().toLowerCase()
+      : runningValue;
+    const state = [item.State, item.state, item.Status, item.status]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return {
+      id,
+      name,
+      running: normalizedRunning === true || normalizedRunning === 1
+        || normalizedRunning === "true" || normalizedRunning === "1"
+        || /running|active|\bup\b|paused|restarting/.test(state),
+    };
   }).filter((item) => item.id && item.running);
 
   const stats: LuckyRecord[] = [];
   for (let index = 0; index < targets.length; index += 6) {
+    throwIfAborted(requestSignal);
     const batch = targets.slice(index, index + 6);
     const results = await Promise.all(batch.map(async (target) => {
       try {
-        const result = await getDockerContainerLiveStats(target.id);
+        const result = await getDockerContainerLiveStats(target.id, requestSignal);
         return { Id: target.id, Name: target.name, stats: result } as LuckyRecord;
-      } catch {
+      } catch (error) {
+        if (requestSignal?.aborted) throw error;
         return undefined;
       }
     }));
@@ -186,9 +318,9 @@ export async function refreshDockerContainerStats(onProgress?: (payload: LuckyRe
   return payload;
 }
 export const commitDockerContainer = (id: string, data: LuckyRecord) =>
-  callDockerApi(`containers/${encodeURIComponent(id)}/commit`, "POST", data);
+  callDockerApi(`containers/${encodeURIComponent(id)}/commit`, "POST", data, undefined, 300000);
 export const copyDockerContainer = (id: string, name: string) =>
-  callDockerApi(`containers/${encodeURIComponent(id)}/copy`, "POST", { name });
+  callDockerApi(`containers/${encodeURIComponent(id)}/copy`, "POST", { name }, undefined, 300000);
 export const checkDockerContainerUpgrade = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/upgrade-check`, "GET", undefined, undefined, 60000);
 export const upgradeDockerContainer = (id: string, data: LuckyRecord) =>
@@ -199,10 +331,12 @@ export const setDockerContainerLabel = (id: string, label: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/label`, "POST", { label });
 export const removeDockerContainerLabel = (id: string) =>
   callDockerApi(`containers/${encodeURIComponent(id)}/label`, "DELETE");
-export const getDockerLabels = () => callDockerApi("labels");
+export const getDockerLabels = (input?: DockerSignalInput) =>
+  callDockerApi("labels", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 export const getDockerLabelContainers = (label: string) =>
   callDockerApi(`labels/${encodeURIComponent(label)}/containers`);
-export const getDockerContainerGroups = () => callDockerApi("container-groups");
+export const getDockerContainerGroups = (input?: DockerSignalInput) =>
+  callDockerApi("container-groups", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 export const createDockerContainerGroup = (data: LuckyRecord) =>
   callDockerApi("container-groups", "POST", data);
 export const updateDockerContainerGroup = (data: LuckyRecord) =>
@@ -215,9 +349,10 @@ export const reorderDockerContainerGroups = (data: unknown) =>
   callDockerApi("container-groups/order", "PUT", data);
 export const setDockerContainerGroupCollapsed = (key: string, collapsed: boolean) =>
   callDockerApi("container-groups/collapsed", "PUT", { key, collapsed });
-export const getDockerContainerGroupCollapsedStates = () =>
-  callDockerApi("container-groups/collapsed/states");
-export const getDockerContainerOrderMapping = () => callDockerApi("containers/order-mapping");
+export const getDockerContainerGroupCollapsedStates = (input?: DockerSignalInput) =>
+  callDockerApi("container-groups/collapsed/states", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerContainerOrderMapping = (input?: DockerSignalInput) =>
+  callDockerApi("containers/order-mapping", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 export const updateDockerContainerOrderMapping = (containerGroupMap: unknown, orderList: unknown) =>
   callDockerApi("containers/order-mapping", "PUT", { containerGroupMap, orderList });
 export const setDockerContainerGroup = (containerName: string, groupKey: string) =>
@@ -225,8 +360,8 @@ export const setDockerContainerGroup = (containerName: string, groupKey: string)
 export const switchDockerContainerVersion = (containerIds: unknown, targetImageRef: string) =>
   callDockerApi("containers/switch-version", "POST", { container_ids: containerIds, target_image_ref: targetImageRef }, undefined, 300000);
 
-export async function listDockerImages() {
-  const raw = await callDockerApi("images", "GET", undefined, { all: false });
+export async function listDockerImages(input?: DockerSignalInput) {
+  const raw = await callDockerApi("images", "GET", undefined, { all: false }, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["images", "list"]), raw };
 }
 export const getDockerImage = (id: string) =>
@@ -266,12 +401,13 @@ export const buildDockerImage = (data: LuckyRecord) =>
 export const pullDockerImageSync = (image: string, tag = "latest") =>
   callDockerApi("images/pull", "POST", { image, tag }, undefined, 600000);
 export const pushDockerImage = (image: string, tag = "latest") =>
-  callDockerApi("images/push", "POST", { image, tag });
+  callDockerApi("images/push", "POST", { image, tag }, undefined, 600000);
 export const buildDockerImageFromGit = (data: LuckyRecord) =>
-  callDockerApi("images/build-from-git", "POST", data);
-export const buildDockerImageFromZip = (data: LuckyRecord) =>
-  callDockerApi("images/build-from-zip", "POST", data);
-export const importDockerImage = (data: LuckyRecord) => callDockerApi("images/import", "POST", data);
+  callDockerApi("images/build-from-git", "POST", data, undefined, 600000);
+export const buildDockerImageFromZip = (data: LuckyRecord | FormData) =>
+  callDockerApi("images/build-from-zip", "POST", data, undefined, 600000);
+export const importDockerImage = (data: LuckyRecord) =>
+  callDockerApi("images/import", "POST", data, undefined, 300000);
 export const loadDockerImage = (data: LuckyRecord | FormData) =>
   callDockerApi("images/load", "POST", data, undefined, 300000);
 export const getDockerImageTags = (id: string) =>
@@ -279,7 +415,7 @@ export const getDockerImageTags = (id: string) =>
 export const getDockerImageFilesystem = (id: string, path = "/") =>
   callDockerApi(`images/${encodeURIComponent(id)}/filesystem`, "GET", undefined, { path });
 export const checkDockerImageUpgrade = (imageRef: string, signal?: AbortSignal) =>
-  callDockerApi("images/upgrade-check", "POST", { image_ref: imageRef }, undefined, 120000, signal);
+  callDockerApi("images/upgrade-check", "POST", { image_ref: imageRef }, undefined, 45000, signal);
 
 type DockerBatchProgress<T> = {
   succeeded: T[];
@@ -356,7 +492,7 @@ export async function checkDockerImagesUpgrade(
     const response = await checkDockerImageUpgrade(imageRef, signal);
     results.push({ imageRef, result: response });
   }, {
-    concurrency: 2,
+    concurrency: 4,
     isCancelled: () => Boolean(signal?.aborted),
     onProgress: (progress) => onProgress?.({
       ret: 0,
@@ -396,6 +532,173 @@ export const backupDockerImageTag = (imageRef: string) =>
 export const getDockerImageContainers = (imageRef: string, signal?: AbortSignal) =>
   callDockerApi("images/containers", "GET", undefined, { image_ref: imageRef }, undefined, signal);
 
+const dockerImageIdKeys = [
+  "ImageID",
+  "ImageId",
+  "imageID",
+  "imageId",
+  "image_id",
+  "Digest",
+  "digest",
+] as const;
+const dockerImageReferenceKeys = [
+  "Image",
+  "image",
+  "ImageName",
+  "imageName",
+  "image_ref",
+  "imageRef",
+  "RepoTag",
+  "repoTag",
+  "RepoTags",
+  "repoTags",
+  "RepoDigest",
+  "repoDigest",
+  "RepoDigests",
+  "repoDigests",
+  "Tags",
+  "tags",
+  "Name",
+  "name",
+] as const;
+const dockerImageRecordIdKeys = ["Id", "ID", "id", ...dockerImageIdKeys] as const;
+const dockerContainerImageReferenceKeys = dockerImageReferenceKeys.filter((key) =>
+  !["Name", "name"].includes(key),
+);
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === "string" || typeof value === "number") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap((item) => stringValues(item));
+  return [];
+}
+
+/** Reads image fields from the Docker list shape and Lucky's nested variants. */
+function collectDockerImageValues(item: LuckyRecord, keys: readonly string[]) {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const values: unknown[] = [];
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: item, depth: 0 }];
+  const visited = new Set<object>();
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (!current.value || typeof current.value !== "object") continue;
+    if (visited.has(current.value)) continue;
+    visited.add(current.value);
+    if (Array.isArray(current.value)) {
+      if (current.depth < 3) {
+        for (const value of current.value) queue.push({ value, depth: current.depth + 1 });
+      }
+      continue;
+    }
+    const record = current.value as LuckyRecord;
+    for (const [key, value] of Object.entries(record)) {
+      if (wanted.has(key.toLowerCase())) values.push(value);
+      if (current.depth < 2 && value && typeof value === "object") {
+        queue.push({ value, depth: current.depth + 1 });
+      }
+    }
+  }
+  return values.flatMap(stringValues);
+}
+
+function imageIdAliases(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/^sha256:/, "");
+  return /^[a-f\d]{12,64}$/i.test(normalized)
+    ? new Set([`id:${normalized}`, `id:sha256:${normalized}`])
+    : new Set<string>();
+}
+
+function canonicalDockerImageReference(value: string) {
+  let reference = value.trim().replace(/^\/+/, "").toLowerCase();
+  if (!reference) return "";
+  const parts = reference.split("/");
+  const first = parts[0];
+  const hasRegistry = parts.length > 1
+    && (first.includes(".") || first.includes(":") || first === "localhost");
+  if (!hasRegistry) {
+    reference = parts.length === 1
+      ? `docker.io/library/${reference}`
+      : `docker.io/${reference}`;
+  }
+  return reference;
+}
+
+function dockerImageAliases(value: string) {
+  const raw = value.trim().replace(/^\/+/, "").toLowerCase();
+  const aliases = new Set<string>();
+  if (!raw) return aliases;
+
+  for (const alias of imageIdAliases(raw)) aliases.add(alias);
+  const digestMatch = raw.match(/(?:^|@)(sha256:[a-f\d]{12,64})$/i);
+  if (digestMatch) {
+    for (const alias of imageIdAliases(digestMatch[1])) aliases.add(alias);
+  }
+
+  const reference = canonicalDockerImageReference(raw);
+  if (!reference) return aliases;
+  aliases.add(`ref:${raw}`);
+  aliases.add(`ref:${reference}`);
+  const last = reference.slice(reference.lastIndexOf("/") + 1);
+  if (!last.includes(":") && !last.includes("@")) aliases.add(`ref:${reference}:latest`);
+  return aliases;
+}
+
+function dockerImageAliasesIntersect(left: Set<string>, right: Set<string>) {
+  for (const alias of left) if (right.has(alias)) return true;
+  const leftIds = [...left]
+    .filter((alias) => alias.startsWith("id:"))
+    .map((alias) => alias.slice(3).replace(/^sha256:/, ""));
+  const rightIds = [...right]
+    .filter((alias) => alias.startsWith("id:"))
+    .map((alias) => alias.slice(3).replace(/^sha256:/, ""));
+  return leftIds.some((leftId) => rightIds.some((rightId) =>
+    leftId.length >= 12
+      && rightId.length >= 12
+      && (leftId.startsWith(rightId) || rightId.startsWith(leftId))));
+}
+
+function collectDockerImageAliases(item: LuckyRecord, imageRecord = false) {
+  const idValues = collectDockerImageValues(item, imageRecord ? dockerImageRecordIdKeys : dockerImageIdKeys);
+  const referenceValues = collectDockerImageValues(
+    item,
+    imageRecord ? dockerImageReferenceKeys : dockerContainerImageReferenceKeys,
+  );
+  const aliases = new Set<string>();
+  const idAliases = new Set<string>();
+  for (const value of idValues) {
+    for (const alias of dockerImageAliases(value)) {
+      aliases.add(alias);
+      if (alias.startsWith("id:")) idAliases.add(alias);
+    }
+  }
+  for (const value of referenceValues) {
+    for (const alias of dockerImageAliases(value)) aliases.add(alias);
+  }
+  return {
+    aliases,
+    hasIdentity: aliases.size > 0,
+    hasImageId: idAliases.size > 0,
+  };
+}
+
+function unusedImageScanResult(
+  unused: string[],
+  used: string[],
+  failed: Array<{ item: string; error: string }>,
+  totalCount: number,
+) {
+  return {
+    ret: 0,
+    unused,
+    used,
+    failed,
+    unusedCount: unused.length,
+    usedCount: used.length,
+    failedCount: failed.length,
+    completedCount: unused.length + used.length + failed.length,
+    totalCount,
+  } as LuckyRecord;
+}
+
 export async function scanUnusedDockerImages(
   imageIds: string[],
   onProgress?: (progress: LuckyRecord) => void,
@@ -404,36 +707,79 @@ export async function scanUnusedDockerImages(
   const items = [...new Set(imageIds.map((item) => item.trim()).filter(Boolean))];
   const unused: string[] = [];
   const used: string[] = [];
-  const result = await runDockerBatch(items, async (imageId) => {
-    const usage = await getDockerImageContainers(imageId, signal);
-    const containers = findArray(usage, ["containers", "list"]);
-    if (!containers) throw new Error("接口未返回镜像容器关联信息");
-    (containers.length ? used : unused).push(imageId);
-  }, {
-    concurrency: 4,
-    isCancelled: () => Boolean(signal?.aborted),
-    onProgress: (progress) => onProgress?.({
-      unused: [...unused],
-      used: [...used],
-      failed: progress.failed,
-      unusedCount: unused.length,
-      usedCount: used.length,
-      failedCount: progress.failed.length,
-      completedCount: progress.completedCount,
-      totalCount: progress.totalCount,
-    }),
-  });
-  return {
-    ret: 0,
-    unused,
-    used,
-    failed: result.failed,
-    unusedCount: unused.length,
-    usedCount: used.length,
-    failedCount: result.failed.length,
-    completedCount: unused.length + used.length + result.failed.length,
-    totalCount: items.length,
-  } as LuckyRecord;
+  const failed: Array<{ item: string; error: string }> = [];
+  const report = () => onProgress?.(unusedImageScanResult(unused, used, failed, items.length));
+  const failAll = (error: string) => {
+    for (const item of items) failed.push({ item, error });
+    report();
+    return unusedImageScanResult(unused, used, failed, items.length);
+  };
+
+  if (!items.length) {
+    report();
+    return unusedImageScanResult(unused, used, failed, 0);
+  }
+
+  let containerResult: Awaited<ReturnType<typeof listDockerContainers>>;
+  try {
+    throwIfAborted(signal);
+    containerResult = await listDockerContainers(signal);
+    throwIfAborted(signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return failAll(error instanceof Error && error.message ? error.message : "Unable to read Docker containers");
+  }
+
+  const containerArray = findArray(containerResult.raw, ["containers", "list"]);
+  if (!containerArray) return failAll("Unable to determine image usage safely");
+  const containerRows = containerArray.filter(isRecord) as LuckyListItem[];
+  const hasUnknownContainerRows = containerRows.length !== containerArray.length;
+  const usageRows = containerRows.map((item) => collectDockerImageAliases(item));
+  const hasUnidentifiedContainer = usageRows.some((row) => !row.hasIdentity);
+  const hasReferenceOnlyContainer = usageRows.some((row) => row.hasIdentity && !row.hasImageId);
+  const hasImageIdCandidate = items.some((item) =>
+    [...dockerImageAliases(item)].some((alias) => alias.startsWith("id:")));
+
+  type ImageIndex = Array<{ aliases: Set<string> }>;
+  let imageIndex: ImageIndex | undefined;
+  let imageIndexError = "Unable to map image IDs to container references";
+  if (hasReferenceOnlyContainer && hasImageIdCandidate) {
+    try {
+      const imageResult = await listDockerImages(signal);
+      const imageArray = findArray(imageResult.raw, ["images", "list"]);
+      if (imageArray && imageArray.every(isRecord)) {
+        imageIndex = (imageArray as LuckyListItem[]).map((item) => ({
+          aliases: collectDockerImageAliases(item, true).aliases,
+        }));
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      imageIndexError = error instanceof Error && error.message ? error.message : imageIndexError;
+    }
+  }
+
+  for (const imageId of items) {
+    throwIfAborted(signal);
+    const aliases = dockerImageAliases(imageId);
+    const matchingImage = imageIndex?.find((image) => dockerImageAliasesIntersect(aliases, image.aliases));
+    if (matchingImage) {
+      for (const alias of matchingImage.aliases) aliases.add(alias);
+    }
+    const isUsed = usageRows.some((row) => dockerImageAliasesIntersect(aliases, row.aliases));
+    if (isUsed) {
+      used.push(imageId);
+    } else if (hasUnknownContainerRows || hasUnidentifiedContainer) {
+      failed.push({ item: imageId, error: "Unable to determine image usage safely" });
+    } else if (hasReferenceOnlyContainer && hasImageIdCandidate && (
+      !imageIndex || !matchingImage
+    )) {
+      failed.push({ item: imageId, error: imageIndexError });
+    } else {
+      unused.push(imageId);
+    }
+    report();
+  }
+  return unusedImageScanResult(unused, used, failed, items.length);
 }
 
 export const pullDockerImageWithBackup = (imageRef: string, backupTag = true, architecture = "") =>
@@ -441,8 +787,8 @@ export const pullDockerImageWithBackup = (imageRef: string, backupTag = true, ar
 export const upgradeDockerImageContainers = (imageRef: string, upgradeCompose = true, upgradeStandalone = true, containerIds: unknown = null) =>
   callDockerApi("images/upgrade-containers", "POST", { image_ref: imageRef, upgrade_compose: upgradeCompose, upgrade_standalone: upgradeStandalone, container_ids: containerIds }, undefined, 300000);
 
-export async function listDockerComposeProjects() {
-  const raw = await callDockerApi("compose/projects");
+export async function listDockerComposeProjects(input?: DockerSignalInput) {
+  const raw = await callDockerApi("compose/projects", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["projects", "list", "composeProjects"]), raw };
 }
 export const runDockerComposeAction = (
@@ -460,6 +806,8 @@ export const getDockerComposeLogs = (name: string, data: LuckyRecord = {}) =>
   callDockerApi(`compose/${encodeURIComponent(name)}/logs`, "POST", data);
 export const readDockerComposeConfig = (projectPath: string) =>
   callDockerApi("compose/config", "POST", { project_path: projectPath });
+export const readDockerComposeFile = (workingDirectory: string, filename: string) =>
+  callDockerApi("compose/read-file", "POST", { working_dir: workingDirectory, filename });
 export const updateDockerComposeConfig = (
   projectPath: string,
   content: string,
@@ -474,28 +822,43 @@ export const backupDockerCompose = (projectPath: string, projectName: string) =>
   callDockerApi("compose/backup", "POST", {
     project_path: projectPath,
     project_name: projectName,
-  });
+  }, undefined, 600000);
 export const listDockerComposeBackups = (projectName: string) =>
   callDockerApi(`compose/${encodeURIComponent(projectName)}/backups`);
+export const uploadDockerComposeBackup = (projectName: string, data: FormData) =>
+  callDockerApi(`compose/${encodeURIComponent(projectName)}/backups/upload`, "POST", data, undefined, 600000);
+export const downloadDockerComposeBackup = (projectName: string, backup: string) =>
+  callDockerApi(
+    `compose/${encodeURIComponent(projectName)}/backups/download.tar.gz`,
+    "GET",
+    undefined,
+    { backup },
+    600000,
+    undefined,
+    "blob",
+  );
 export const removeDockerComposeBackup = (projectName: string, backup: string) =>
   callDockerApi(`compose/${encodeURIComponent(projectName)}/backups`, "DELETE", { backup });
 export const clearDockerComposeBackups = (projectName: string) =>
   callDockerApi(`compose/${encodeURIComponent(projectName)}/backups/all`, "DELETE");
 export const restoreDockerComposeBackup = (projectName: string, backup: string) =>
   callDockerApi(`compose/${encodeURIComponent(projectName)}/backups/restore`, "POST", { backup }, undefined, 600000);
+export const restoreDockerCompose = (data: FormData) =>
+  callDockerApi("compose/restore", "POST", data, undefined, 600000);
 export const cancelDockerComposeBackup = (projectName: string) =>
   callDockerApi(`compose/${encodeURIComponent(projectName)}/backup/cancel`, "DELETE");
-export const getDockerComposeBackupStatus = () => callDockerApi("compose/backup/status");
-export const getDockerComposeContainers = (projectName: string) =>
-  callDockerApi(`compose/${encodeURIComponent(projectName)}/ps`);
+export const getDockerComposeBackupStatus = (input?: DockerSignalInput) =>
+  callDockerApi("compose/backup/status", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerComposeContainers = (projectName: string, projectPath = "") =>
+  callDockerApi(`compose/${encodeURIComponent(projectName)}/ps`, "GET", undefined, { path: projectPath || undefined });
 export const getDockerComposeContainersForCron = () => callDockerApi("compose/containers-for-cron");
 export const readDockerComposeDockerfile = (projectPath: string) =>
   callDockerApi("compose/dockerfile", "POST", { project_path: projectPath });
 export const updateDockerComposeDockerfile = (projectPath: string, content: string) =>
   callDockerApi("compose/update-dockerfile", "POST", { project_path: projectPath, content });
 
-export async function listDockerNetworks() {
-  const raw = await callDockerApi("networks");
+export async function listDockerNetworks(input?: DockerSignalInput) {
+  const raw = await callDockerApi("networks", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["networks", "list"]), raw };
 }
 export const createDockerNetwork = (data: LuckyRecord) =>
@@ -503,8 +866,8 @@ export const createDockerNetwork = (data: LuckyRecord) =>
 export const removeDockerNetwork = (id: string) =>
   callDockerApi(`networks/${encodeURIComponent(id)}`, "DELETE");
 
-export async function listDockerVolumes() {
-  const raw = await callDockerApi("volumes");
+export async function listDockerVolumes(input?: DockerSignalInput) {
+  const raw = await callDockerApi("volumes", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["volumes", "list"]), raw };
 }
 export const createDockerVolume = (data: LuckyRecord) =>
@@ -512,9 +875,15 @@ export const createDockerVolume = (data: LuckyRecord) =>
 export const removeDockerVolume = (name: string) =>
   callDockerApi(`volumes/${encodeURIComponent(name)}`, "DELETE");
 export const backupDockerVolume = (name: string) =>
-  callDockerApi(`volumes/${encodeURIComponent(name)}/backup`, "POST");
+  callDockerApi(`volumes/${encodeURIComponent(name)}/backup`, "POST", undefined, undefined, 600000);
 export const listDockerVolumeBackups = (name: string) =>
   callDockerApi(`volumes/${encodeURIComponent(name)}/backups`);
+export const uploadDockerVolumeBackup = (name: string, data: FormData) =>
+  callDockerApi(`volumes/${encodeURIComponent(name)}/backups/upload`, "POST", data, undefined, 600000);
+export const exportDockerVolume = (name: string) =>
+  callDockerApi("volumes/export", "GET", undefined, { name }, 600000, undefined, "blob");
+export const importDockerVolume = (data: FormData) =>
+  callDockerApi("volumes/import", "POST", data, undefined, 600000);
 export const restoreDockerVolumeBackup = (name: string, backup: string) =>
   callDockerApi(
     `volumes/${encodeURIComponent(name)}/backups/restore`,
@@ -527,10 +896,11 @@ export const removeDockerVolumeBackup = (name: string, backup: string) =>
   callDockerApi(`volumes/${encodeURIComponent(name)}/backups`, "DELETE", { backup });
 export const cancelDockerVolumeBackup = (name: string) =>
   callDockerApi(`volumes/${encodeURIComponent(name)}/backup/cancel`, "DELETE");
-export const getDockerVolumeBackupStatus = () => callDockerApi("volumes/backup/status");
+export const getDockerVolumeBackupStatus = (input?: DockerSignalInput) =>
+  callDockerApi("volumes/backup/status", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 
-export async function listDockerTasks() {
-  const raw = await callDockerApi("tasks");
+export async function listDockerTasks(input?: DockerSignalInput) {
+  const raw = await callDockerApi("tasks", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["tasks", "list"]), raw };
 }
 export const getDockerTask = (id: string) =>
@@ -539,29 +909,37 @@ export const removeDockerTask = (id: string) =>
   callDockerApi(`tasks/${encodeURIComponent(id)}`, "DELETE");
 export const clearDockerTasks = () => callDockerApi("tasks", "DELETE");
 
-export const getDockerInfo = () => callDockerApi("info");
-export const getDockerVersion = () => callDockerApi("version");
-export const getDockerDiskUsage = () => callDockerApi("disk-usage");
-export const getDockerMonitorStatus = () => callDockerApi("monitor/status");
-export const getDockerSelfContainerInfo = () => callDockerApi("self-container");
+export const getDockerInfo = (input?: DockerSignalInput) =>
+  callDockerApi("info", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerVersion = (input?: DockerSignalInput) =>
+  callDockerApi("version", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerDiskUsage = (input?: DockerSignalInput) =>
+  callDockerApi("disk-usage", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerMonitorStatus = (input?: DockerSignalInput) =>
+  callDockerApi("monitor/status", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export const getDockerSelfContainerInfo = (input?: DockerSignalInput) =>
+  callDockerApi("self-container", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 
-async function optionalDockerRequest<T>(request: Promise<T>) {
+async function optionalDockerRequest<T>(request: Promise<T>, signal?: AbortSignal) {
   try {
     return await request;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return undefined;
   }
 }
 
-export async function getDockerOverview() {
+export async function getDockerOverview(input?: DockerSignalInput) {
+  const signal = resolveDockerSignal(input);
   const [infoRaw, containersResult, imagesResult, composeResult, networksResult, volumesResult] = await Promise.all([
-    optionalDockerRequest(getDockerInfo()),
-    optionalDockerRequest(listDockerContainers()),
-    optionalDockerRequest(listDockerImages()),
-    optionalDockerRequest(listDockerComposeProjects()),
-    optionalDockerRequest(listDockerNetworks()),
-    optionalDockerRequest(listDockerVolumes()),
+    optionalDockerRequest(getDockerInfo(signal), signal),
+    optionalDockerRequest(listDockerContainers(signal), signal),
+    optionalDockerRequest(listDockerImages(signal), signal),
+    optionalDockerRequest(listDockerComposeProjects(signal), signal),
+    optionalDockerRequest(listDockerNetworks(signal), signal),
+    optionalDockerRequest(listDockerVolumes(signal), signal),
   ]);
+  throwIfAborted(signal);
 
   if (!infoRaw && !containersResult && !imagesResult && !composeResult && !networksResult && !volumesResult) {
     throw new Error("Docker 总览接口均不可用");
@@ -600,18 +978,20 @@ export async function getDockerOverview() {
   };
 }
 
-export async function getDockerMaintenanceStatus() {
+export async function getDockerMaintenanceStatus(input?: DockerSignalInput) {
+  const signal = resolveDockerSignal(input);
   const requests = {
-    labels: getDockerLabels(),
-    containerGroups: getDockerContainerGroups(),
-    collapsedStates: getDockerContainerGroupCollapsedStates(),
-    orderMapping: getDockerContainerOrderMapping(),
-    imageUpgrades: getDockerImageUpgradeStatus(),
-    composeBackup: getDockerComposeBackupStatus(),
-    volumeBackup: getDockerVolumeBackupStatus(),
+    labels: getDockerLabels(signal),
+    containerGroups: getDockerContainerGroups(signal),
+    collapsedStates: getDockerContainerGroupCollapsedStates(signal),
+    orderMapping: getDockerContainerOrderMapping(signal),
+    imageUpgrades: getDockerImageUpgradeStatus("", signal),
+    composeBackup: getDockerComposeBackupStatus(signal),
+    volumeBackup: getDockerVolumeBackupStatus(signal),
   };
   const entries = Object.entries(requests);
   const results = await Promise.allSettled(entries.map(([, request]) => request));
+  throwIfAborted(signal);
   return Object.fromEntries(results.map((result, index) => [
     entries[index][0],
     result.status === "fulfilled"
@@ -619,33 +999,46 @@ export async function getDockerMaintenanceStatus() {
       : { error: result.reason instanceof Error ? result.reason.message : "接口请求失败" },
   ])) as Record<string, LuckyRecord>;
 }
-export const getDockerConfig = () => callDockerApi("config");
+export const getDockerConfig = (input?: DockerSignalInput) =>
+  callDockerApi("config", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 export const updateDockerConfig = (data: LuckyRecord) =>
   callDockerApi("config", "POST", data);
-export const getDockerLogs = (pageSize = 200, page = 1) =>
-  callDockerApi("logs", "GET", undefined, { pageSize, page });
+export const getDockerLogs = (pageSize = 200, page = 1, input?: DockerSignalInput) =>
+  callDockerApi("logs", "GET", undefined, { pageSize, page }, undefined, resolveDockerSignal(input));
 async function pruneUnusedDockerImages() {
   const { items } = await listDockerImages();
-  const removed: string[] = [];
-  const skipped: string[] = [];
-  for (let index = 0; index < items.length; index += 6) {
-    const batch = items.slice(index, index + 6);
-    const results = await Promise.all(batch.map(async (image) => {
-      const id = [image.Id, image.ID, image.id].find((value) => typeof value === "string") as string | undefined;
-      if (!id) return { id: "未知镜像", removed: false };
-      try {
-        const usage = await getDockerImageContainers(id);
-        const containers = list(usage, ["containers", "list"]);
-        if (containers.length) return { id, removed: false };
-        await removeDockerImage(id, true);
-        return { id, removed: true };
-      } catch {
-        return { id, removed: false };
-      }
-    }));
-    for (const result of results) (result.removed ? removed : skipped).push(result.id);
+  const ids: string[] = [];
+  let missingIdCount = 0;
+  for (const image of items) {
+    const id = [image.Id, image.ID, image.id]
+      .find((value) => typeof value === "string" && value.trim()) as string | undefined;
+    if (id) ids.push(id);
+    else missingIdCount += 1;
   }
-  return { removed, skipped, removedCount: removed.length };
+
+  // Resolve usage from one container snapshot. This is both faster than one
+  // association request per image and conservative when Lucky omits identity
+  // fields: uncertain images remain in the skipped set.
+  const scan = await scanUnusedDockerImages(ids);
+  const unused = Array.isArray(scan.unused) ? scan.unused.map(String) : [];
+  const removal = await runDockerBatch(unused, (id) => removeDockerImage(id, true), {
+    concurrency: 4,
+  });
+  const used = Array.isArray(scan.used) ? scan.used.map(String) : [];
+  const uncertain = Array.isArray(scan.failed)
+    ? scan.failed.flatMap((item) => isRecord(item) && typeof item.item === "string" ? [item.item] : [])
+    : [];
+  return {
+    removed: removal.succeeded,
+    skipped: [
+      ...Array.from({ length: missingIdCount }, () => "未知镜像"),
+      ...used,
+      ...uncertain,
+      ...removal.failed.map(({ item }) => item),
+    ],
+    removedCount: removal.succeeded.length,
+    skippedCount: used.length + uncertain.length + removal.failed.length + missingIdCount,
+  };
 }
 
 export async function pruneDocker(data: LuckyRecord) {
@@ -665,7 +1058,8 @@ export async function pruneDocker(data: LuckyRecord) {
     return { ret: 0, msg: "已使用兼容模式清理未使用镜像", system, images };
   }
 }
-export const getDockerRegistryMirrors = () => callDockerApi("registry/mirrors");
+export const getDockerRegistryMirrors = (input?: DockerSignalInput) =>
+  callDockerApi("registry/mirrors", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
 export const addDockerRegistryMirror = (mirror: string) =>
   callDockerApi("registry/mirrors", "POST", { mirror });
 export const removeDockerRegistryMirror = (mirror: string) =>

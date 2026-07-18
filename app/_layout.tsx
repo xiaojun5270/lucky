@@ -1,7 +1,7 @@
 import '@/src/global.css';
 
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -16,8 +16,14 @@ const { useSnapshot } = require('valtio/react');
 export default function RootLayout() {
   const colors = useAppTheme();
   const session = useSnapshot(luckySessionState);
+  const router = useRouter();
+  const segments = useSegments();
 
   useEffect(() => { hydrateLuckySession(); }, []);
+  useEffect(() => {
+    if (!session.hydrated || session.token || segments[0] === 'login') return;
+    router.replace('/login');
+  }, [router, segments, session.hydrated, session.token]);
 
   return <GestureHandlerRootView style={{ flex: 1 }}>
     <StatusBar style={colors.mode === 'dark' ? 'light' : 'dark'} />
@@ -27,6 +33,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="services/[kind]" options={{ title: '服务详情', headerBackTitle: '返回' }} />
+          <Stack.Screen name="modules/[module]" options={{ title: '模块接口', headerBackTitle: '返回' }} />
+          <Stack.Screen name="endpoints/[id]" options={{ title: '接口调试', headerBackTitle: '返回' }} />
           <Stack.Screen name="webservice" options={{ title: 'Web 服务', headerBackTitle: '返回' }} />
           <Stack.Screen name="docker" options={{ title: 'Docker', headerBackTitle: '返回' }} />
         </Stack>}

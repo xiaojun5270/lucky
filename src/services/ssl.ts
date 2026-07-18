@@ -42,12 +42,12 @@ function extractCertificates(payload: LuckyRecord): LuckyListItem[] {
   return bestScore > 0 ? best as LuckyListItem[] : [];
 }
 
-export async function getSslCertificates() {
-  const raw = await luckyFetch("/api/ssl");
+export async function getSslCertificates(signal?: AbortSignal) {
+  const raw = await luckyFetch("/api/ssl", { signal });
   return { items: extractCertificates(raw), raw };
 }
 
-export const getSslCertificate = (key: string) => luckyFetch(`/api/ssl/${encodeURIComponent(key)}`);
+export const getSslCertificate = (key: string, signal?: AbortSignal) => luckyFetch(`/api/ssl/${encodeURIComponent(key)}`, { signal });
 export const createSslCertificate = (value: LuckyRecord) => luckyFetch("/api/ssl", { method: "POST", body: JSON.stringify(value) });
 export const updateSslCertificate = (value: LuckyRecord) => luckyFetch("/api/ssl", { method: "PUT", body: JSON.stringify(value) });
 export const deleteSslCertificate = (key: string) => luckyFetch(`/api/ssl${query({ key })}`, { method: "DELETE" });
@@ -65,9 +65,9 @@ export async function syncSslCertificate(key: string) {
 }
 export const reorderSslCertificates = (keys: unknown) =>
   luckyFetch("/api/ssl/sslorderadjustment", { method: "PUT", body: JSON.stringify(keys) });
-export const getSslSyncClients = () => luckyFetch("/api/ssl/syncclients");
-export async function getSslSyncClientOptions() {
-  const payload = await getSslSyncClients();
+export const getSslSyncClients = (signal?: AbortSignal) => luckyFetch("/api/ssl/syncclients", { signal });
+export async function getSslSyncClientOptions(signal?: AbortSignal) {
+  const payload = await getSslSyncClients(signal);
   const queue: unknown[] = [payload];
   const visited = new Set<object>();
   let best: LuckyListItem[] = [];
@@ -88,10 +88,10 @@ export async function getSslSyncClientOptions() {
   }
   return best;
 }
-export const getSslSetting = () => luckyFetch("/api/ssl/setting");
+export const getSslSetting = (signal?: AbortSignal) => luckyFetch("/api/ssl/setting", { signal });
 export const updateSslSetting = (value: LuckyRecord) =>
   luckyFetch("/api/ssl/setting", { method: "PUT", body: JSON.stringify(value) });
 export const cancelSslAcme = (key: string) => luckyFetch(`/api/ssl/${encodeURIComponent(key)}/acmecancel`, { method: "DELETE" });
-export const getSslLogs = (key = "", pageSize = 100, page = 1) =>
-  luckyFetch(`/api/ssl/logs${query({ key, pageSize, page })}`);
-export const getSslLastLogs = (key = "") => luckyFetch(`/api/ssl/lastlogs${query({ key })}`);
+export const getSslLogs = (key = "", pageSize = 100, page = 1, signal?: AbortSignal) =>
+  luckyFetch(`/api/ssl/logs${query({ key, pageSize, page })}`, { signal });
+export const getSslLastLogs = (key = "", signal?: AbortSignal) => luckyFetch(`/api/ssl/lastlogs${query({ key })}`, { signal });

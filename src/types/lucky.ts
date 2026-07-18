@@ -9,6 +9,7 @@ export type LuckyLoginInput = {
   baseUrl: string;
   account: string;
   password: string;
+  twoFACode?: string;
 };
 
 export type LuckyListItem = LuckyRecord & {
@@ -94,6 +95,8 @@ export type LuckyEndpointCall = {
   method: LuckyHttpMethod;
   pathValues?: Record<string, string>;
   suffix?: string;
-  query?: LuckyRecord;
+  query?: LuckyRecord | unknown[];
   body?: unknown;
+  retryAuth?: boolean;
+  signal?: AbortSignal;
 };

@@ -94,7 +94,7 @@ async function messageBytes(data: unknown) {
 }
 
 function statusSocketUrl() {
-  const base = luckySessionState.baseUrl.trim().replace(/\/$/, '');
+  const base = luckySessionState.baseUrl.trim().replace(/\/+$/, '');
   const socketBase = base.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
   return `${socketBase}/api/status/ws?Lucky-Admin-Token=${encodeURIComponent(luckySessionState.token)}&_=${Date.now()}`;
 }

@@ -487,6 +487,20 @@ export function dockerContainerState(item: LuckyRecord): DockerContainerState {
   if (/paused/.test(state)) return "paused";
   if (/created/.test(state)) return "created";
   if (/exited|stopped|dead|removing/.test(state)) return "exited";
+  const running = item.Running ?? item.running;
+  const normalizedRunning = typeof running === "string" ? running.trim().toLowerCase() : running;
+  if (
+    normalizedRunning === true ||
+    normalizedRunning === 1 ||
+    normalizedRunning === "true" ||
+    normalizedRunning === "1"
+  ) return "running";
+  if (
+    normalizedRunning === false ||
+    normalizedRunning === 0 ||
+    normalizedRunning === "false" ||
+    normalizedRunning === "0"
+  ) return "exited";
   if (/running|active|\bup\b|restarting/.test(state)) return "running";
   return "other";
 }
