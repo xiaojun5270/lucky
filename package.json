@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "node scripts/patch-expo-modules-jsi.mjs",
     "generate:endpoints": "node scripts/generate-endpoints.mjs",
     "check:endpoints": "node scripts/generate-endpoints.mjs --check",
     "typecheck": "tsc --noEmit",
