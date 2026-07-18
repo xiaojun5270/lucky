@@ -73,7 +73,15 @@ export async function luckyFetch<T extends LuckyRecord = LuckyRecord>(
   if (!baseUrl) throw new Error('请输入 Lucky 服务地址');
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = requestOptions.signal;
+  let timedOut = false;
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -106,10 +114,14 @@ export async function luckyFetch<T extends LuckyRecord = LuckyRecord>(
     if (!response.ok || payload.ret !== 0) throw new Error(payload.msg || `请求失败（HTTP ${response.status}）`);
     return payload;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw new Error('请求超时，请检查服务器连接');
+    if (error instanceof Error && error.name === 'AbortError') {
+      if (externalSignal?.aborted) throw new Error('请求已取消');
+      if (timedOut) throw new Error('请求超时，请检查服务器连接');
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', abortFromExternal);
   }
 }
 

@@ -20,6 +20,7 @@ import {
   ListChecks,
   MemoryStick,
   Network,
+  PackageSearch,
   Pause,
   Pencil,
   Play,
@@ -88,6 +89,7 @@ import {
   getDockerContainerLogs,
   getDockerContainerProcesses,
   getDockerImage,
+  getDockerImageUpgradeStatus,
   getDockerLogs,
   getDockerMaintenanceStatus,
   getDockerOverview,
@@ -116,6 +118,7 @@ import {
   restoreDockerVolumeBackup,
   runDockerComposeAction,
   runDockerContainerAction,
+  scanUnusedDockerImages,
   tagDockerImage,
   updateDockerComposeConfig,
   updateDockerConfig,
@@ -541,6 +544,7 @@ type DetailState = {
   title: string;
   value?: unknown;
   loading?: boolean;
+  status?: string;
   error?: string;
 };
 
@@ -556,10 +560,14 @@ function DockerDetailViewer({ detail, close }: { detail: DetailState; close: () 
             <X color={colors.subtext} size={19} />
           </Pressable>
         </View>
-        {detail.loading ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
+        {detail.error ? <ErrorState message={detail.error} /> : detail.loading && detail.value === undefined ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={{ color: colors.subtext, fontSize: 13 }}>正在读取详情</Text>
-        </View> : detail.error ? <ErrorState message={detail.error} /> : <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 18 }}>
+          <Text style={{ color: colors.subtext, fontSize: 13 }}>{detail.status ?? "正在读取详情"}</Text>
+        </View> : <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 18, gap: 12 }}>
+          {detail.loading ? <View style={{ minHeight: 44, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.primarySoft, flexDirection: "row", alignItems: "center", gap: 9 }}>
+            <ActivityIndicator color={colors.primary} size="small" />
+            <Text style={{ flex: 1, color: colors.primary, fontSize: 12, fontWeight: "700" }}>{detail.status ?? "正在处理"}</Text>
+          </View> : null}
           <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
             <StructuredDataView value={detail.value} />
           </View>
@@ -586,6 +594,15 @@ export default function DockerScreen() {
   const detailRequestRef = useRef(0);
   const [imageSelectionMode, setImageSelectionMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [imageUpgradeChecking, setImageUpgradeChecking] = useState(false);
+  const imageUpgradeRunningRef = useRef(false);
+  const imageUpgradeAbortRef = useRef<AbortController | undefined>(undefined);
+  const [unusedImageScanChecking, setUnusedImageScanChecking] = useState(false);
+  const [unusedImageScanProgress, setUnusedImageScanProgress] = useState<{ completed: number; total: number }>();
+  const unusedImageScanRequestRef = useRef(0);
+  const unusedImageScanRunningRef = useRef(false);
+  const unusedImageScanAbortRef = useRef<AbortController | undefined>(undefined);
+  const [imageDeleteProgress, setImageDeleteProgress] = useState<{ completed: number; total: number }>();
   const [containerMenu, setContainerMenu] = useState<{ key: string; name: string; running: boolean; paused: boolean }>();
   const [output, setOutput] = useState<unknown>("");
   const [localError, setLocalError] = useState("");
@@ -608,6 +625,12 @@ export default function DockerScreen() {
       setAppIsActive(state === "active");
     });
     return () => subscription.remove();
+  }, []);
+  useEffect(() => () => {
+    detailRequestRef.current += 1;
+    unusedImageScanRequestRef.current += 1;
+    imageUpgradeAbortRef.current?.abort();
+    unusedImageScanAbortRef.current?.abort();
   }, []);
   const containers = useQuery({
     queryKey: ["docker", "containers"],
@@ -725,7 +748,12 @@ export default function DockerScreen() {
       if (type === "images-remove-batch") {
         const ids = Array.isArray(value?.ids) ? value.ids.map(String).filter(Boolean) : [];
         if (!ids.length) throw new Error("未选择要删除的镜像");
-        const result = await removeDockerImages(ids);
+        const result = await removeDockerImages(ids, (progress) => {
+          setImageDeleteProgress({
+            completed: Number(progress.completedCount) || 0,
+            total: Number(progress.totalCount) || ids.length,
+          });
+        });
         if (Number(result.removedCount) === 0 && Number(result.failedCount) > 0) {
           const firstFailure = Array.isArray(result.failed) && result.failed[0] && typeof result.failed[0] === "object"
             ? String((result.failed[0] as LuckyRecord).error ?? "")
@@ -810,13 +838,20 @@ export default function DockerScreen() {
         return removeDockerRegistryMirror(key ?? "");
       throw new Error("不支持的 Docker 操作");
     },
-    onMutate: () => {
+    onMutate: (variables) => {
       setLocalError("");
       setLocalNotice("");
+      if (variables.type === "images-remove-batch") {
+        const total = Array.isArray(variables.value?.ids) ? variables.value.ids.length : 0;
+        setImageDeleteProgress({ completed: 0, total });
+      } else {
+        setImageDeleteProgress(undefined);
+      }
     },
     onSuccess: async (result, variables) => {
       setEditor(undefined);
       setLocalError("");
+      setImageDeleteProgress(undefined);
       await queryClient.invalidateQueries({ queryKey: ["docker"] });
       if (variables.type === "images-remove-batch") {
         const record = result as unknown as LuckyRecord;
@@ -834,6 +869,7 @@ export default function DockerScreen() {
     },
     onError: (error) => {
       setLocalNotice("");
+      setImageDeleteProgress(undefined);
       setLocalError(error.message);
     },
   });
@@ -897,7 +933,11 @@ export default function DockerScreen() {
   const visibleImageIds = useMemo(() => visibleImageEntries.map(({ id }) => id), [visibleImageEntries]);
   const allVisibleImagesSelected = visibleImageIds.length > 0 && visibleImageIds.every((id) => selectedImageSet.has(id));
   const hasImageUpgradeTargets = validSelectedImageIds.length > 0 || visibleImageEntries.length > 0;
+  const imageSelectionBusy = mutation.isPending || unusedImageScanChecking;
+  const imageActionBusy = imageSelectionBusy || imageUpgradeChecking;
   useEffect(() => {
+    unusedImageScanRequestRef.current += 1;
+    unusedImageScanAbortRef.current?.abort();
     setSelectedImageIds((current) => {
       const next = current.filter((id) => imageIdSet.has(id));
       return next.length === current.length ? current : next;
@@ -905,6 +945,8 @@ export default function DockerScreen() {
   }, [imageIdSet]);
   useEffect(() => {
     if (view === "images") return;
+    unusedImageScanRequestRef.current += 1;
+    unusedImageScanAbortRef.current?.abort();
     setImageSelectionMode(false);
     setSelectedImageIds((current) => current.length ? [] : current);
   }, [view]);
@@ -931,6 +973,7 @@ export default function DockerScreen() {
     ]);
   const closeDetail = () => {
     detailRequestRef.current += 1;
+    imageUpgradeAbortRef.current?.abort();
     setDetail(undefined);
   };
   async function openDetail(title: string, request: () => Promise<unknown>) {
@@ -946,7 +989,7 @@ export default function DockerScreen() {
     }
   }
   function toggleImageSelection(id: string) {
-    if (mutation.isPending) return;
+    if (imageActionBusy) return;
     setSelectedImageIds((current) =>
       current.includes(id)
         ? current.filter((item) => item !== id)
@@ -954,14 +997,18 @@ export default function DockerScreen() {
     );
   }
   function toggleImageSelectionMode() {
-    if (mutation.isPending) return;
+    if (mutation.isPending || imageUpgradeChecking) return;
+    if (unusedImageScanChecking) {
+      unusedImageScanRequestRef.current += 1;
+      unusedImageScanAbortRef.current?.abort();
+    }
     setImageSelectionMode((current) => {
       if (current) setSelectedImageIds([]);
       return !current;
     });
   }
   function toggleVisibleImageSelection() {
-    if (mutation.isPending || !visibleImageIds.length) return;
+    if (imageActionBusy || !visibleImageIds.length) return;
     setSelectedImageIds((current) => {
       const next = new Set(current.filter((id) => imageIdSet.has(id)));
       if (visibleImageIds.every((id) => next.has(id))) {
@@ -972,27 +1019,122 @@ export default function DockerScreen() {
       return [...next];
     });
   }
-  async function detectImageUpgrades() {
-    if (mutation.isPending) return;
+  async function selectUnusedImages() {
+    if (imageActionBusy || unusedImageScanRunningRef.current || !visibleImageIds.length) return;
+    const requestId = ++unusedImageScanRequestRef.current;
+    const total = visibleImageIds.length;
+    const controller = new AbortController();
+    unusedImageScanAbortRef.current = controller;
+    unusedImageScanRunningRef.current = true;
+    setUnusedImageScanChecking(true);
     setLocalError("");
     setLocalNotice("");
-    const targets = validSelectedImageIds.length
+    setUnusedImageScanProgress({ completed: 0, total });
+    try {
+      const result = await scanUnusedDockerImages(
+        visibleImageIds,
+        (progress) => {
+          if (unusedImageScanRequestRef.current !== requestId) return;
+          setUnusedImageScanProgress({
+            completed: Number(progress.completedCount) || 0,
+            total: Number(progress.totalCount) || total,
+          });
+        },
+        controller.signal,
+      );
+      if (unusedImageScanRequestRef.current !== requestId) return;
+      const unusedIds = Array.isArray(result.unused) ? result.unused.map(String).filter((id) => imageIdSet.has(id)) : [];
+      const usedCount = Number(result.usedCount) || 0;
+      const failedCount = Number(result.failedCount) || 0;
+      setSelectedImageIds(unusedIds);
+      if (!unusedIds.length && !usedCount && failedCount) {
+        const firstFailure = Array.isArray(result.failed) && result.failed[0] && typeof result.failed[0] === "object"
+          ? String((result.failed[0] as LuckyRecord).error ?? "")
+          : "";
+        setLocalError(firstFailure || "未能确认镜像使用情况");
+      } else {
+        setLocalNotice(`已选择 ${unusedIds.length} 个未使用镜像，${usedCount} 个正在使用${failedCount ? `，${failedCount} 个无法确认` : ""}`);
+      }
+    } catch (error) {
+      if (unusedImageScanRequestRef.current === requestId) {
+        setLocalError(error instanceof Error ? error.message : "检查镜像使用情况失败");
+      }
+    } finally {
+      unusedImageScanRunningRef.current = false;
+      if (unusedImageScanAbortRef.current === controller) unusedImageScanAbortRef.current = undefined;
+      setUnusedImageScanChecking(false);
+      setUnusedImageScanProgress(undefined);
+    }
+  }
+  async function detectImageUpgrades() {
+    if (imageActionBusy || imageUpgradeRunningRef.current) return;
+    setLocalError("");
+    setLocalNotice("");
+    const hasExplicitSelection = validSelectedImageIds.length > 0;
+    const targets = hasExplicitSelection
       ? imageEntries.filter((item) => selectedImageSet.has(item.id))
       : visibleImageEntries;
-    const references = [...new Set(targets.flatMap((item) => item.references))];
+    const references = [...new Set(hasExplicitSelection
+      ? targets.flatMap((item) => item.references)
+      : targets.map((item) => item.references[0]).filter(Boolean))];
     if (!references.length) {
       setLocalError("没有可检测升级的镜像标签");
       return;
     }
-    await openDetail(`检测镜像升级 · ${references.length} 个标签`, () => checkDockerImagesUpgrade(references));
+    const title = `检测镜像升级 · ${references.length} 个${hasExplicitSelection ? "标签" : "镜像主标签"}`;
+    const requestId = ++detailRequestRef.current;
+    const controller = new AbortController();
+    imageUpgradeAbortRef.current = controller;
+    imageUpgradeRunningRef.current = true;
+    setImageUpgradeChecking(true);
+    setDetail({
+      title,
+      loading: true,
+      status: `正在检测 0/${references.length}`,
+      value: { completedCount: 0, totalCount: references.length, checkedCount: 0, failedCount: 0, inProgress: true },
+    });
+    try {
+      const checked = await checkDockerImagesUpgrade(
+        references,
+        (progress) => {
+          if (detailRequestRef.current !== requestId) return;
+          const completed = Number(progress.completedCount) || 0;
+          const total = Number(progress.totalCount) || references.length;
+          setDetail({ title, value: progress, loading: completed < total, status: `正在检测 ${completed}/${total}` });
+        },
+        controller.signal,
+      );
+      if (detailRequestRef.current !== requestId) return;
+      setDetail({ title, value: checked, loading: true, status: "正在读取升级状态" });
+      try {
+        const imageUpgrades = await getDockerImageUpgradeStatus("", controller.signal);
+        if (detailRequestRef.current === requestId) setDetail({ title, value: { ...checked, imageUpgrades } });
+      } catch (error) {
+        if (detailRequestRef.current === requestId) {
+          setDetail({
+            title,
+            value: { ...checked, statusError: error instanceof Error ? error.message : "读取升级状态失败" },
+          });
+        }
+      }
+    } catch (error) {
+      if (detailRequestRef.current === requestId) {
+        setDetail({ title, error: error instanceof Error ? error.message : "检测镜像升级失败" });
+      }
+    } finally {
+      imageUpgradeRunningRef.current = false;
+      if (imageUpgradeAbortRef.current === controller) imageUpgradeAbortRef.current = undefined;
+      setImageUpgradeChecking(false);
+      void queryClient.invalidateQueries({ queryKey: ["docker", "maintenance"] });
+    }
   }
   function removeSelectedImages() {
-    if (mutation.isPending) return;
+    if (imageActionBusy) return;
     if (!validSelectedImageIds.length) {
       setLocalError("请先选择要删除的镜像");
       return;
     }
-    danger("批量删除镜像", `确定强制删除已选择的 ${validSelectedImageIds.length} 个镜像？`, () =>
+    danger("批量删除镜像", `确定删除已选择的 ${validSelectedImageIds.length} 个镜像？正在使用的镜像会自动跳过。`, () =>
       mutation.mutate({ type: "images-remove-batch", value: { ids: validSelectedImageIds } }),
     );
   }
@@ -1307,8 +1449,8 @@ export default function DockerScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={validSelectedImageIds.length ? `检测已选择的 ${validSelectedImageIds.length} 个镜像升级` : `检测当前 ${visibleImageEntries.length} 个镜像升级`}
-              accessibilityState={{ disabled: images.isLoading || !hasImageUpgradeTargets || mutation.isPending }}
-              disabled={images.isLoading || !hasImageUpgradeTargets || mutation.isPending}
+              accessibilityState={{ disabled: images.isLoading || !hasImageUpgradeTargets || imageActionBusy }}
+              disabled={images.isLoading || !hasImageUpgradeTargets || imageActionBusy}
               onPress={() => void detectImageUpgrades()}
               style={({ pressed }) => ({
                 flex: 1,
@@ -1321,16 +1463,16 @@ export default function DockerScreen() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 6,
-                opacity: images.isLoading || !hasImageUpgradeTargets || mutation.isPending ? 0.45 : pressed ? 0.62 : 1,
+                opacity: images.isLoading || !hasImageUpgradeTargets || imageActionBusy ? 0.45 : pressed ? 0.62 : 1,
               })}
             >
-              <RefreshCw color={colors.primary} size={16} />
-              <Text style={{ color: colors.primary, fontWeight: "800" }}>检测升级</Text>
+              {imageUpgradeChecking ? <ActivityIndicator color={colors.primary} size="small" /> : <RefreshCw color={colors.primary} size={16} />}
+              <Text style={{ color: colors.primary, fontWeight: "800" }}>{imageUpgradeChecking ? "检测中" : "检测升级"}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ selected: imageSelectionMode, disabled: mutation.isPending }}
-              disabled={mutation.isPending}
+              accessibilityState={{ selected: imageSelectionMode, disabled: mutation.isPending || imageUpgradeChecking }}
+              disabled={mutation.isPending || imageUpgradeChecking}
               onPress={toggleImageSelectionMode}
               style={({ pressed }) => ({
                 flex: 1,
@@ -1343,7 +1485,7 @@ export default function DockerScreen() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 6,
-                opacity: mutation.isPending ? 0.45 : pressed ? 0.62 : 1,
+                opacity: mutation.isPending || imageUpgradeChecking ? 0.45 : pressed ? 0.62 : 1,
               })}
             >
               <ListChecks color={imageSelectionMode ? colors.danger : colors.text} size={16} />
@@ -1356,26 +1498,37 @@ export default function DockerScreen() {
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityLabel={allVisibleImagesSelected ? "取消选择当前显示的全部镜像" : "选择当前显示的全部镜像"}
-                accessibilityState={{ checked: allVisibleImagesSelected, disabled: !visibleImageIds.length || mutation.isPending }}
-                disabled={!visibleImageIds.length || mutation.isPending}
+                accessibilityState={{ checked: allVisibleImagesSelected, disabled: !visibleImageIds.length || imageActionBusy }}
+                disabled={!visibleImageIds.length || imageActionBusy}
                 onPress={toggleVisibleImageSelection}
-                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: !visibleImageIds.length || mutation.isPending ? 0.45 : 1 }}
+                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: !visibleImageIds.length || imageActionBusy ? 0.45 : 1 }}
               >
                 <ListChecks color={colors.primary} size={15} />
                 <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>{allVisibleImagesSelected ? "取消全选" : "全选"}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`删除已选择的 ${validSelectedImageIds.length} 个镜像`}
-                accessibilityState={{ disabled: !validSelectedImageIds.length || mutation.isPending }}
-                disabled={!validSelectedImageIds.length || mutation.isPending}
-                onPress={removeSelectedImages}
-                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: validSelectedImageIds.length ? colors.dangerBg : colors.muted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: mutation.isPending ? 0.45 : 1 }}
+                accessibilityLabel={unusedImageScanChecking ? "正在检查未使用镜像" : "选择当前显示的未使用镜像"}
+                accessibilityState={{ disabled: !visibleImageIds.length || imageActionBusy }}
+                disabled={!visibleImageIds.length || imageActionBusy}
+                onPress={() => void selectUnusedImages()}
+                style={{ flex: 1, height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: unusedImageScanChecking ? 1 : !visibleImageIds.length || imageActionBusy ? 0.45 : 1 }}
               >
-                <Trash2 color={validSelectedImageIds.length ? colors.danger : colors.disabled} size={15} />
-                <Text style={{ color: validSelectedImageIds.length ? colors.danger : colors.disabled, fontSize: 12, fontWeight: "700" }}>删除所选</Text>
+                {unusedImageScanChecking ? <ActivityIndicator color={colors.primary} size="small" /> : <PackageSearch color={colors.primary} size={15} />}
+                <Text numberOfLines={1} style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>{unusedImageScanChecking ? unusedImageScanProgress ? `${unusedImageScanProgress.completed}/${unusedImageScanProgress.total}` : "检查中" : "选择未使用"}</Text>
               </Pressable>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`删除已选择的 ${validSelectedImageIds.length} 个镜像`}
+              accessibilityState={{ disabled: !validSelectedImageIds.length || imageActionBusy }}
+              disabled={!validSelectedImageIds.length || imageActionBusy}
+              onPress={removeSelectedImages}
+              style={{ width: "100%", height: 44, paddingHorizontal: 10, borderRadius: 11, backgroundColor: validSelectedImageIds.length ? colors.dangerBg : colors.muted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: imageActionBusy && !imageDeleteProgress ? 0.45 : 1 }}
+            >
+              {imageDeleteProgress ? <ActivityIndicator color={colors.danger} size="small" /> : <Trash2 color={validSelectedImageIds.length ? colors.danger : colors.disabled} size={15} />}
+              <Text style={{ color: validSelectedImageIds.length ? colors.danger : colors.disabled, fontSize: 12, fontWeight: "700" }}>{imageDeleteProgress ? `删除中 ${imageDeleteProgress.completed}/${imageDeleteProgress.total}` : "删除所选"}</Text>
+            </Pressable>
           </View> : null}
           {visibleImageEntries.length ? (
             visibleImageEntries.map(({ item, id: key }) => {
@@ -1384,7 +1537,7 @@ export default function DockerScreen() {
               return (
                 <Panel key={key}>
                   <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    {imageSelectionMode ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: mutation.isPending }} accessibilityLabel={`选择镜像 ${name}`} disabled={mutation.isPending} onPress={() => toggleImageSelection(key)} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: mutation.isPending ? 0.45 : 1 }}>
+                    {imageSelectionMode ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: imageActionBusy }} accessibilityLabel={`选择镜像 ${name}`} disabled={imageActionBusy} onPress={() => toggleImageSelection(key)} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: imageActionBusy ? 0.45 : 1 }}>
                       <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: selected ? colors.danger : colors.border, backgroundColor: selected ? colors.danger : colors.card, alignItems: "center", justifyContent: "center" }}>
                         {selected ? <Check color="#fff" size={15} strokeWidth={2.6} /> : null}
                       </View>

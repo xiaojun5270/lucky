@@ -21,16 +21,18 @@ function encodeQuery(params?: LuckyRecord) {
   return text ? `?${text}` : "";
 }
 
-function list(payload: LuckyRecord, keys: string[]): LuckyListItem[] {
+function findArray(payload: LuckyRecord, keys: string[]) {
   for (const source of [payload, payload.data, payload.result]) {
-    if (Array.isArray(source))
-      return source.filter(isRecord) as LuckyListItem[];
+    if (Array.isArray(source)) return source;
     if (!isRecord(source)) continue;
     for (const key of keys)
-      if (Array.isArray(source[key]))
-        return (source[key] as unknown[]).filter(isRecord) as LuckyListItem[];
+      if (Array.isArray(source[key])) return source[key] as unknown[];
   }
-  return [];
+  return undefined;
+}
+
+function list(payload: LuckyRecord, keys: string[]): LuckyListItem[] {
+  return (findArray(payload, keys) ?? []).filter(isRecord) as LuckyListItem[];
 }
 
 function findScalar(payload: unknown, keys: string[]) {
@@ -79,6 +81,7 @@ export function callDockerApi(
   data?: unknown,
   params?: LuckyRecord,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ) {
   return luckyFetch(
     `/api/docker/${path.replace(/^\//, "")}${encodeQuery(params)}`,
@@ -91,6 +94,7 @@ export function callDockerApi(
             ? data
             : JSON.stringify(data),
       timeoutMs,
+      signal,
     },
   );
 }
@@ -274,47 +278,97 @@ export const getDockerImageTags = (id: string) =>
   callDockerApi(`images/${encodeURIComponent(id)}/tags`);
 export const getDockerImageFilesystem = (id: string, path = "/") =>
   callDockerApi(`images/${encodeURIComponent(id)}/filesystem`, "GET", undefined, { path });
-export const checkDockerImageUpgrade = (imageRef: string) =>
-  callDockerApi("images/upgrade-check", "POST", { image_ref: imageRef }, undefined, 120000);
+export const checkDockerImageUpgrade = (imageRef: string, signal?: AbortSignal) =>
+  callDockerApi("images/upgrade-check", "POST", { image_ref: imageRef }, undefined, 120000, signal);
 
-async function runDockerBatch<T>(items: T[], task: (item: T) => Promise<unknown>, concurrency = 4) {
+type DockerBatchProgress<T> = {
+  succeeded: T[];
+  failed: { item: T; error: string }[];
+  completedCount: number;
+  totalCount: number;
+};
+
+async function runDockerBatch<T>(
+  items: T[],
+  task: (item: T) => Promise<unknown>,
+  options: {
+    concurrency?: number;
+    onProgress?: (progress: DockerBatchProgress<T>) => void;
+    isCancelled?: () => boolean;
+  } = {},
+) {
+  const { concurrency = 4, onProgress, isCancelled } = options;
   const succeeded: T[] = [];
   const failed: { item: T; error: string }[] = [];
   let cursor = 0;
   const worker = async () => {
     while (cursor < items.length) {
+      if (isCancelled?.()) return;
       const item = items[cursor++];
       try {
         await task(item);
         succeeded.push(item);
       } catch (error) {
         failed.push({ item, error: error instanceof Error ? error.message : "请求失败" });
+      } finally {
+        onProgress?.({
+          succeeded: [...succeeded],
+          failed: [...failed],
+          completedCount: succeeded.length + failed.length,
+          totalCount: items.length,
+        });
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return { succeeded, failed };
+  return { succeeded, failed, cancelled: cursor < items.length };
 }
 
-export async function removeDockerImages(references: string[]) {
+export async function removeDockerImages(references: string[], onProgress?: (progress: LuckyRecord) => void) {
   const items = [...new Set(references.map((item) => item.trim()).filter(Boolean))];
-  const result = await runDockerBatch(items, (reference) => removeDockerImage(reference, true));
+  const result = await runDockerBatch(items, (reference) => removeDockerImage(reference, false), {
+    onProgress: (progress) => onProgress?.({
+      completedCount: progress.completedCount,
+      totalCount: progress.totalCount,
+      removedCount: progress.succeeded.length,
+      failedCount: progress.failed.length,
+    }),
+  });
   return {
     ret: 0,
     removed: result.succeeded,
     failed: result.failed,
     removedCount: result.succeeded.length,
     failedCount: result.failed.length,
+    completedCount: result.succeeded.length + result.failed.length,
+    totalCount: items.length,
   } as LuckyRecord;
 }
 
-export async function checkDockerImagesUpgrade(imageRefs: string[]) {
+export async function checkDockerImagesUpgrade(
+  imageRefs: string[],
+  onProgress?: (progress: LuckyRecord) => void,
+  signal?: AbortSignal,
+) {
   const items = [...new Set(imageRefs.map((item) => item.trim()).filter(Boolean))];
   const results: LuckyRecord[] = [];
   const result = await runDockerBatch(items, async (imageRef) => {
-    const response = await checkDockerImageUpgrade(imageRef);
+    const response = await checkDockerImageUpgrade(imageRef, signal);
     results.push({ imageRef, result: response });
-  }, 2);
+  }, {
+    concurrency: 2,
+    isCancelled: () => Boolean(signal?.aborted),
+    onProgress: (progress) => onProgress?.({
+      ret: 0,
+      checked: [...results],
+      failed: progress.failed,
+      checkedCount: progress.succeeded.length,
+      failedCount: progress.failed.length,
+      completedCount: progress.completedCount,
+      totalCount: progress.totalCount,
+      inProgress: progress.completedCount < progress.totalCount,
+    }),
+  });
   if (!result.succeeded.length && result.failed.length) {
     throw new Error(result.failed[0].error);
   }
@@ -324,11 +378,14 @@ export async function checkDockerImagesUpgrade(imageRefs: string[]) {
     failed: result.failed,
     checkedCount: result.succeeded.length,
     failedCount: result.failed.length,
+    completedCount: result.succeeded.length + result.failed.length,
+    totalCount: items.length,
+    inProgress: false,
   } as LuckyRecord;
 }
 
-export const getDockerImageUpgradeStatus = (imageRef = "") =>
-  callDockerApi("images/upgrade-status", "GET", undefined, imageRef ? { image_ref: imageRef } : undefined);
+export const getDockerImageUpgradeStatus = (imageRef = "", signal?: AbortSignal) =>
+  callDockerApi("images/upgrade-status", "GET", undefined, imageRef ? { image_ref: imageRef } : undefined, undefined, signal);
 export const dismissDockerImageUpgrade = (imageRef: string, imageId = "") =>
   callDockerApi("images/upgrade-dismiss", "POST", { image_ref: imageRef, image_id: imageId });
 export const clearDockerImageUpgradeStatus = () => callDockerApi("images/upgrade-status", "DELETE");
@@ -336,8 +393,49 @@ export const removeDockerSavedDigest = (imageId: string) =>
   callDockerApi("images/remove-saved-digest", "POST", { image_id: imageId });
 export const backupDockerImageTag = (imageRef: string) =>
   callDockerApi("images/backup-tag", "POST", { image_ref: imageRef });
-export const getDockerImageContainers = (imageRef: string) =>
-  callDockerApi("images/containers", "GET", undefined, { image_ref: imageRef });
+export const getDockerImageContainers = (imageRef: string, signal?: AbortSignal) =>
+  callDockerApi("images/containers", "GET", undefined, { image_ref: imageRef }, undefined, signal);
+
+export async function scanUnusedDockerImages(
+  imageIds: string[],
+  onProgress?: (progress: LuckyRecord) => void,
+  signal?: AbortSignal,
+) {
+  const items = [...new Set(imageIds.map((item) => item.trim()).filter(Boolean))];
+  const unused: string[] = [];
+  const used: string[] = [];
+  const result = await runDockerBatch(items, async (imageId) => {
+    const usage = await getDockerImageContainers(imageId, signal);
+    const containers = findArray(usage, ["containers", "list"]);
+    if (!containers) throw new Error("接口未返回镜像容器关联信息");
+    (containers.length ? used : unused).push(imageId);
+  }, {
+    concurrency: 4,
+    isCancelled: () => Boolean(signal?.aborted),
+    onProgress: (progress) => onProgress?.({
+      unused: [...unused],
+      used: [...used],
+      failed: progress.failed,
+      unusedCount: unused.length,
+      usedCount: used.length,
+      failedCount: progress.failed.length,
+      completedCount: progress.completedCount,
+      totalCount: progress.totalCount,
+    }),
+  });
+  return {
+    ret: 0,
+    unused,
+    used,
+    failed: result.failed,
+    unusedCount: unused.length,
+    usedCount: used.length,
+    failedCount: result.failed.length,
+    completedCount: unused.length + used.length + result.failed.length,
+    totalCount: items.length,
+  } as LuckyRecord;
+}
+
 export const pullDockerImageWithBackup = (imageRef: string, backupTag = true, architecture = "") =>
   callDockerApi("images/pull-with-backup", "POST", { image_ref: imageRef, backup_tag: backupTag, architecture }, undefined, 600000);
 export const upgradeDockerImageContainers = (imageRef: string, upgradeCompose = true, upgradeStandalone = true, containerIds: unknown = null) =>
