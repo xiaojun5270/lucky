@@ -791,6 +791,15 @@ export async function listDockerComposeProjects(input?: DockerSignalInput) {
   const raw = await callDockerApi("compose/projects", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["projects", "list", "composeProjects"]), raw };
 }
+export type DockerComposeCreateInput = {
+  project_name?: string;
+  working_dir: string;
+  compose_content: string;
+  config_file_name: string;
+  build?: boolean;
+};
+export const createDockerCompose = (data: DockerComposeCreateInput, signal?: AbortSignal) =>
+  callDockerApi("compose/up-async", "POST", data, undefined, undefined, signal);
 export const runDockerComposeAction = (
   action: "up" | "down" | "start" | "stop" | "restart",
   data: LuckyRecord,
@@ -903,8 +912,70 @@ export async function listDockerTasks(input?: DockerSignalInput) {
   const raw = await callDockerApi("tasks", "GET", undefined, undefined, undefined, resolveDockerSignal(input));
   return { items: list(raw, ["tasks", "list"]), raw };
 }
-export const getDockerTask = (id: string) =>
-  callDockerApi(`tasks/${encodeURIComponent(id)}`);
+export const getDockerTask = (id: string, input?: DockerSignalInput) =>
+  callDockerApi(`tasks/${encodeURIComponent(id)}`, "GET", undefined, undefined, undefined, resolveDockerSignal(input));
+export type DockerTaskWaitOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  intervalMs?: number;
+  onProgress?: (task: LuckyRecord) => void;
+};
+
+function preferredTaskScalar(payload: LuckyRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = findScalar(payload, [key]);
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
+function waitForDockerPoll(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      const error = new Error("Request cancelled");
+      error.name = "AbortError";
+      reject(error);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", cancel);
+      resolve();
+    }, ms);
+    const cancel = () => {
+      clearTimeout(timer);
+      const error = new Error("Request cancelled");
+      error.name = "AbortError";
+      reject(error);
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+  });
+}
+
+export async function waitForDockerTask(id: string, options: DockerTaskWaitOptions = {}) {
+  const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
+  const intervalMs = Math.max(500, options.intervalMs ?? 1200);
+  const startedAt = Date.now();
+  let lastTask: LuckyRecord | undefined;
+  while (Date.now() - startedAt < timeoutMs) {
+    throwIfAborted(options.signal);
+    const task = await getDockerTask(id, options.signal);
+    lastTask = task;
+    options.onProgress?.(task);
+    const status = String(preferredTaskScalar(task, ["status", "state"]) ?? "")
+      .trim()
+      .toLowerCase();
+    if (["completed", "complete", "success", "succeeded"].includes(status)) return task;
+    if (["failed", "error", "cancelled", "canceled"].includes(status)) {
+      const detail = preferredTaskScalar(task, ["error", "message", "output", "msg"]);
+      throw new Error(String(detail || `Docker 任务 ${status}`));
+    }
+    await waitForDockerPoll(intervalMs, options.signal);
+  }
+  const status = lastTask
+    ? String(preferredTaskScalar(lastTask, ["status", "state"]) ?? "")
+    : "";
+  throw new Error(`Docker 任务等待超时（任务 ID：${id}${status ? `，状态：${status}` : ""}），任务可能仍在后台执行`);
+}
 export const removeDockerTask = (id: string) =>
   callDockerApi(`tasks/${encodeURIComponent(id)}`, "DELETE");
 export const clearDockerTasks = () => callDockerApi("tasks", "DELETE");

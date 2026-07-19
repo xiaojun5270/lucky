@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import { fetch as expoFetch } from "expo/fetch";
 import { Directory, File as ExpoFile, Paths } from "expo-file-system";
@@ -12,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleStop,
+  ClipboardPaste,
   Container,
   Copy,
   Cpu,
@@ -49,7 +51,7 @@ import {
   X,
 } from "lucide-react-native";
 import { type ReactNode, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -94,6 +96,7 @@ import {
   checkDockerContainerUpgrade,
   commitDockerContainer,
   copyDockerContainer,
+  createDockerCompose,
   createDockerContainerGroup,
   createDockerContainer,
   createDockerNetwork,
@@ -170,6 +173,7 @@ import {
   uploadDockerContainerFile,
   uploadDockerVolumeBackup,
   upgradeDockerContainer,
+  waitForDockerTask,
 } from "@/src/services/docker";
 
 type DockerView =
@@ -183,6 +187,19 @@ type DockerView =
   | "settings"
   | "logs";
 type Editor = { type: string; title: string; value: LuckyRecord; key?: string };
+type ComposeCreateValue = {
+  projectName: string;
+  workingDirectory: string;
+  configFileName: string;
+  composeContent: string;
+  build: boolean;
+};
+type ComposeCreateProgress = {
+  taskId?: string;
+  status?: string;
+  message: string;
+  progress?: number;
+};
 type DockerUploadAsset = {
   uri: string;
   name: string;
@@ -191,6 +208,14 @@ type DockerUploadAsset = {
 };
 
 const emptyDockerContainers: LuckyRecord[] = [];
+const defaultComposeTemplate = `services:
+  app:
+    image: nginx:alpine
+    container_name: lucky-compose-app
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+`;
 
 const tabs = [
   ["containers", "容器", Container],
@@ -225,6 +250,42 @@ function stringParam(value: string | string[] | undefined) {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function deepScalar(payload: unknown, keys: string[]) {
+  for (const key of keys) {
+    const wanted = key.toLowerCase();
+    const queue: unknown[] = [payload];
+    const visited = new Set<object>();
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || typeof current !== "object" || visited.has(current)) continue;
+      visited.add(current);
+      if (Array.isArray(current)) {
+        queue.push(...current);
+        continue;
+      }
+      for (const [candidate, value] of Object.entries(current)) {
+        if (candidate.toLowerCase() === wanted && ["string", "number", "boolean"].includes(typeof value)) {
+          return value as string | number | boolean;
+        }
+      }
+      queue.push(...Object.values(current));
+    }
+  }
+  return undefined;
+}
+
+function composeTaskProgress(payload: LuckyRecord, taskId?: string): ComposeCreateProgress {
+  const status = String(deepScalar(payload, ["status", "state"]) ?? "").trim();
+  const message = String(deepScalar(payload, ["message", "output", "error"]) ?? "").trim();
+  const rawProgress = Number(deepScalar(payload, ["progress", "percent", "percentage"]));
+  return {
+    taskId,
+    status,
+    message: message || (status ? `任务状态：${status}` : "正在创建 Compose 项目"),
+    progress: Number.isFinite(rawProgress) ? Math.min(100, Math.max(0, rawProgress)) : undefined,
+  };
 }
 
 function dockerUploadFormData(asset: DockerUploadAsset, fields: LuckyRecord = {}) {
@@ -884,6 +945,305 @@ function DockerActionSheet({
   );
 }
 
+function ComposeCreateField({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const colors = useAppTheme();
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={colors.placeholder}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={{
+          minHeight: 46,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+          color: colors.text,
+          paddingHorizontal: 12,
+          paddingVertical: 9,
+          fontSize: 13,
+        }}
+      />
+    </View>
+  );
+}
+
+function ComposeCreateEditor({
+  busy,
+  progress,
+  error,
+  close,
+  save,
+}: {
+  busy: boolean;
+  progress?: ComposeCreateProgress;
+  error?: string;
+  close: () => void;
+  save: (value: ComposeCreateValue) => void;
+}) {
+  const colors = useAppTheme();
+  const [value, setValue] = useState<ComposeCreateValue>({
+    projectName: "",
+    workingDirectory: "",
+    configFileName: "compose.yaml",
+    composeContent: defaultComposeTemplate,
+    build: false,
+  });
+  const [inputError, setInputError] = useState("");
+  const composeInputRef = useRef<TextInput>(null);
+
+  const update = <K extends keyof ComposeCreateValue>(key: K, next: ComposeCreateValue[K]) => {
+    setValue((current) => ({ ...current, [key]: next }));
+    setInputError("");
+  };
+
+  async function importComposeFile() {
+    setInputError("");
+    try {
+      const selection = await DocumentPicker.getDocumentAsync({
+        type: ["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "text/plain", "application/octet-stream"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (selection.canceled) return;
+      const asset = selection.assets[0];
+      if (!/\.ya?ml$/i.test(asset.name)) throw new Error("请选择 .yml 或 .yaml 文件");
+      const size = asset.size ?? asset.file?.size ?? 0;
+      if (size > 1024 * 1024) throw new Error("Compose 文件不能超过 1 MB");
+      const content = Platform.OS === "web" && asset.file
+        ? await asset.file.text()
+        : await new ExpoFile(asset.uri).text();
+      if (!content.trim()) throw new Error("Compose 文件内容为空");
+      if (content.length > 1024 * 1024) throw new Error("Compose 文件不能超过 1 MB");
+      setValue((current) => ({
+        ...current,
+        configFileName: asset.name,
+        composeContent: content,
+      }));
+    } catch (cause) {
+      setInputError(cause instanceof Error ? cause.message : "读取 Compose 文件失败");
+    }
+  }
+
+  async function pasteComposeContent() {
+    setInputError("");
+    if (Platform.OS === "web" && globalThis.isSecureContext === false) {
+      composeInputRef.current?.focus();
+      setInputError("HTTP 页面无法直接读取系统剪贴板，请在 YAML 编辑区使用浏览器粘贴");
+      return;
+    }
+    try {
+      const content = await Clipboard.getStringAsync();
+      if (!content.trim()) throw new Error("剪贴板中没有可粘贴的内容");
+      if (content.length > 1024 * 1024) throw new Error("Compose 内容不能超过 1 MB");
+      update("composeContent", content);
+    } catch (cause) {
+      if (Platform.OS === "web") composeInputRef.current?.focus();
+      setInputError(cause instanceof Error ? cause.message : "读取剪贴板失败");
+    }
+  }
+
+  function loadTemplate() {
+    const applyTemplate = () => update("composeContent", defaultComposeTemplate);
+    if (value.composeContent.trim() && value.composeContent !== defaultComposeTemplate) {
+      Alert.alert("加载 Compose 模板", "当前 YAML 内容将被替换。", [
+        { text: "取消", style: "cancel" },
+        { text: "替换", onPress: applyTemplate },
+      ]);
+      return;
+    }
+    applyTemplate();
+  }
+
+  function submit() {
+    const workingDirectory = value.workingDirectory.trim();
+    const configFileName = value.configFileName.trim();
+    const composeContent = value.composeContent.trim();
+    if (!workingDirectory) {
+      setInputError("请输入工作目录");
+      return;
+    }
+    if (!configFileName) {
+      setInputError("请输入配置文件名");
+      return;
+    }
+    if (/[\\/]/.test(configFileName) || !/\.ya?ml$/i.test(configFileName)) {
+      setInputError("配置文件名必须是 .yml 或 .yaml 文件名，不能包含路径");
+      return;
+    }
+    if (!composeContent) {
+      setInputError("请输入 Compose YAML 内容");
+      return;
+    }
+    if (composeContent.length > 1024 * 1024) {
+      setInputError("Compose 内容不能超过 1 MB");
+      return;
+    }
+    save({
+      ...value,
+      projectName: value.projectName.trim(),
+      workingDirectory,
+      configFileName,
+      composeContent: value.composeContent,
+    });
+  }
+
+  const visibleError = inputError || error;
+  return (
+    <Modal animationType="slide" presentationStyle="fullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+      <FullScreenSafeArea style={{ flex: 1, backgroundColor: colors.page }}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={{ flex: 1, width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 18, paddingTop: 14, gap: 12 }}>
+            <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <IconTile icon={Workflow} size={38} iconSize={19} />
+              <Text style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: "800" }}>创建 Compose</Text>
+              <Pressable accessibilityLabel="关闭创建 Compose" onPress={close} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.mutedCard, alignItems: "center", justifyContent: "center" }}>
+                <X color={colors.subtext} size={19} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              style={{ flex: 1 }}
+              contentContainerStyle={{ gap: 14, paddingBottom: 12 }}
+            >
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {[
+                  { label: "导入文件", icon: Upload, action: () => void importComposeFile() },
+                  { label: "粘贴 YAML", icon: ClipboardPaste, action: () => void pasteComposeContent() },
+                  { label: "使用模板", icon: FileText, action: loadTemplate },
+                ].map(({ label, icon: Icon, action }) => (
+                  <Pressable
+                    key={label}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                    onPress={action}
+                    style={({ pressed }) => ({
+                      flexGrow: 1,
+                      flexBasis: 132,
+                      minHeight: 44,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primarySoft,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
+                      opacity: busy ? 0.45 : pressed ? 0.65 : 1,
+                    })}
+                  >
+                    <Icon color={colors.primary} size={16} />
+                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "800" }}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <ComposeCreateField label="项目名称（可选）" value={value.projectName} placeholder="例如：my-app" onChange={(next) => update("projectName", next)} />
+              <ComposeCreateField label="工作目录" value={value.workingDirectory} placeholder="例如：/opt/compose/my-app" onChange={(next) => update("workingDirectory", next)} />
+              <ComposeCreateField label="配置文件名" value={value.configFileName} placeholder="compose.yaml" onChange={(next) => update("configFileName", next)} />
+
+              <View style={{ minHeight: 46, flexDirection: "row", alignItems: "center", gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>构建镜像</Text>
+                </View>
+                <Switch
+                  disabled={busy}
+                  value={value.build}
+                  onValueChange={(next) => update("build", next)}
+                  trackColor={{ false: colors.disabled, true: colors.primary }}
+                />
+              </View>
+
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text style={{ flex: 1, color: colors.text, fontSize: 12, fontWeight: "700" }}>Compose YAML</Text>
+                  <Text style={{ color: colors.subtext, fontSize: 10 }}>{value.composeContent.length} 字符</Text>
+                </View>
+                <TextInput
+                  ref={composeInputRef}
+                  editable={!busy}
+                  value={value.composeContent}
+                  onChangeText={(next) => update("composeContent", next)}
+                  multiline
+                  textAlignVertical="top"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  style={{
+                    minHeight: 280,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                    color: colors.text,
+                    padding: 12,
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    lineHeight: 18,
+                  }}
+                />
+              </View>
+
+              {progress ? (
+                <View style={{ gap: 8, padding: 12, borderRadius: 12, backgroundColor: colors.primarySoft }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <ActivityIndicator color={colors.primary} size="small" />
+                    <Text numberOfLines={2} style={{ flex: 1, color: colors.primary, fontSize: 12, lineHeight: 17, fontWeight: "700" }}>{progress.message}</Text>
+                    {progress.progress !== undefined ? <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "800" }}>{Math.round(progress.progress)}%</Text> : null}
+                  </View>
+                  {progress.progress !== undefined ? (
+                    <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.muted }}>
+                      <View style={{ height: 4, width: `${progress.progress}%`, borderRadius: 2, backgroundColor: colors.primary }} />
+                    </View>
+                  ) : null}
+                  {progress.taskId ? <Text selectable numberOfLines={1} style={{ color: colors.subtext, fontSize: 10 }}>任务 ID：{progress.taskId}</Text> : null}
+                </View>
+              ) : null}
+              {visibleError ? <ErrorState message={visibleError} /> : null}
+            </ScrollView>
+
+            <Pressable
+              disabled={busy}
+              onPress={submit}
+              style={{
+                height: 50,
+                marginBottom: 10,
+                borderRadius: 12,
+                backgroundColor: busy ? colors.disabled : colors.primary,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {busy ? <ActivityIndicator color="#fff" size="small" /> : <Play color="#fff" size={17} />}
+              <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "正在创建" : "创建并启动"}</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </FullScreenSafeArea>
+    </Modal>
+  );
+}
+
 function DockerFormEditor({
   editor,
   busy,
@@ -1017,6 +1377,9 @@ export default function DockerScreen() {
   const [dockerLogPage, setDockerLogPage] = useState(1);
   const deferredSearch = useDeferredValue(search);
   const [editor, setEditor] = useState<Editor>();
+  const [composeCreatorOpen, setComposeCreatorOpen] = useState(false);
+  const [composeCreateProgress, setComposeCreateProgress] = useState<ComposeCreateProgress>();
+  const composeCreateAbortRef = useRef<AbortController | undefined>(undefined);
   const [detail, setDetail] = useState<DetailState>();
   const detailRequestRef = useRef(0);
   const [imageSelectionMode, setImageSelectionMode] = useState(false);
@@ -1060,6 +1423,7 @@ export default function DockerScreen() {
   useEffect(() => () => {
     detailRequestRef.current += 1;
     unusedImageScanRequestRef.current += 1;
+    composeCreateAbortRef.current?.abort();
     imageUpgradeAbortRef.current?.abort();
     unusedImageScanAbortRef.current?.abort();
   }, []);
@@ -1182,10 +1546,12 @@ export default function DockerScreen() {
       type,
       key,
       value,
+      signal,
     }: {
       type: string;
       key?: string;
       value?: LuckyRecord;
+      signal?: AbortSignal;
     }) => {
       if (type === "container-create")
         return createDockerContainer(value ?? {});
@@ -1285,6 +1651,33 @@ export default function DockerScreen() {
         const image = String(value?.image ?? "").trim();
         if (!image) throw new Error("请输入要推送的镜像");
         return pushDockerImage(image, String(value?.tag ?? "latest").trim() || "latest");
+      }
+      if (type === "compose-create") {
+        const workingDirectory = String(value?.working_dir ?? "").trim();
+        const configFileName = String(value?.config_file_name ?? "").trim();
+        const composeContent = String(value?.compose_content ?? "");
+        if (!workingDirectory) throw new Error("请输入 Compose 工作目录");
+        if (!configFileName || /[\\/]/.test(configFileName) || !/\.ya?ml$/i.test(configFileName)) {
+          throw new Error("请输入有效的 Compose 配置文件名");
+        }
+        if (!composeContent.trim()) throw new Error("Compose YAML 内容为空");
+        setComposeCreateProgress({ message: "正在提交 Compose 创建任务" });
+        const submission = await createDockerCompose({
+          project_name: String(value?.project_name ?? "").trim(),
+          working_dir: workingDirectory,
+          compose_content: composeContent,
+          config_file_name: configFileName,
+          build: Boolean(value?.build),
+        }, signal);
+        const taskId = String(deepScalar(submission, ["task_id", "taskId", "id"]) ?? "").trim();
+        if (!taskId) throw new Error("服务端未返回 Compose 创建任务 ID");
+        setComposeCreateProgress({ taskId, message: "Compose 创建任务已提交" });
+        void queryClient.invalidateQueries({ queryKey: ["docker", "tasks"] });
+        const task = await waitForDockerTask(taskId, {
+          signal,
+          onProgress: (nextTask) => setComposeCreateProgress(composeTaskProgress(nextTask, taskId)),
+        });
+        return { submission, task };
       }
       if (type === "compose-config-save") {
         const projectPath = String(value?.project_path ?? "").trim();
@@ -1432,6 +1825,7 @@ export default function DockerScreen() {
     onMutate: (variables) => {
       setLocalError("");
       setLocalNotice("");
+      if (variables.type === "compose-create") setComposeCreateProgress(undefined);
       if (variables.type === "images-remove-batch") {
         const total = Array.isArray(variables.value?.ids) ? variables.value.ids.length : 0;
         setImageDeleteProgress({ completed: 0, total });
@@ -1441,6 +1835,11 @@ export default function DockerScreen() {
     },
     onSuccess: (result, variables) => {
       setEditor(undefined);
+      if (variables.type === "compose-create") {
+        setComposeCreatorOpen(false);
+        setComposeCreateProgress(undefined);
+        composeCreateAbortRef.current = undefined;
+      }
       if (["image-build-zip", "image-load", "container-file-upload", "compose-backup-upload", "compose-restore", "volume-backup-upload", "volume-import"].includes(variables.type)) {
         setDockerUpload(undefined);
       }
@@ -1466,6 +1865,11 @@ export default function DockerScreen() {
       } else if (variables.type.startsWith("compose-")) {
         invalidate("docker", "compose");
         invalidate("docker", "overview");
+        if (variables.type === "compose-create") {
+          invalidate("docker", "tasks");
+          invalidate("docker", "containers");
+          invalidate("docker", "images");
+        }
         if (variables.type.includes("backup")) invalidate("docker", "maintenance");
       } else if (variables.type.startsWith("network-")) {
         invalidate("docker", "networks");
@@ -1507,13 +1911,20 @@ export default function DockerScreen() {
         setSelectedImageIds(failedIds);
         setImageSelectionMode(Boolean(failedIds.length));
         setLocalNotice(`已删除 ${removedCount} 个镜像${failedCount ? `，${failedCount} 个删除失败` : ""}`);
+      } else if (variables.type === "compose-create") {
+        setLocalNotice("Compose 项目已创建并启动");
       } else {
         setLocalNotice("操作已完成，数据已刷新");
       }
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       setLocalNotice("");
       setImageDeleteProgress(undefined);
+      if (variables.type === "compose-create") {
+        setComposeCreateProgress(undefined);
+        composeCreateAbortRef.current = undefined;
+        if (variables.signal?.aborted) return;
+      }
       setLocalError(error.message);
     },
   });
@@ -2468,27 +2879,59 @@ export default function DockerScreen() {
             title="Compose 项目"
             meta={`${filtered.length} 项`}
           />
-          <Pressable
-            onPress={() =>
-              setEditor({
-                type: "compose-discover",
-                title: "发现 Compose 项目",
-                value: { scan_path: "" },
-              })
-            }
-            style={{
-              height: 46,
-              borderRadius: 12,
-              backgroundColor: colors.primary,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-            }}
-          >
-            <Search color="#fff" size={17} />
-            <Text style={{ color: "#fff", fontWeight: "800" }}>扫描项目</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <Pressable
+              disabled={mutation.isPending}
+              onPress={() => {
+                mutation.reset();
+                setLocalError("");
+                setLocalNotice("");
+                setComposeCreateProgress(undefined);
+                setComposeCreatorOpen(true);
+              }}
+              style={({ pressed }) => ({
+                flexGrow: 1,
+                flexBasis: 150,
+                height: 46,
+                borderRadius: 12,
+                backgroundColor: colors.primary,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 7,
+                opacity: mutation.isPending ? 0.45 : pressed ? 0.7 : 1,
+              })}
+            >
+              <Plus color="#fff" size={17} />
+              <Text style={{ color: "#fff", fontWeight: "800" }}>创建 Compose</Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                setEditor({
+                  type: "compose-discover",
+                  title: "发现 Compose 项目",
+                  value: { scan_path: "" },
+                })
+              }
+              style={({ pressed }) => ({
+                flexGrow: 1,
+                flexBasis: 150,
+                height: 46,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.primary,
+                backgroundColor: colors.primarySoft,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 7,
+                opacity: pressed ? 0.65 : 1,
+              })}
+            >
+              <Search color={colors.primary} size={17} />
+              <Text style={{ color: colors.primary, fontWeight: "800" }}>扫描项目</Text>
+            </Pressable>
+          </View>
             </>,
           )}
             data={filtered}
@@ -3319,6 +3762,40 @@ export default function DockerScreen() {
       ) : null}
 
       {detail ? <DockerDetailViewer detail={detail} close={closeDetail} /> : null}
+      {composeCreatorOpen ? (
+        <ComposeCreateEditor
+          busy={mutation.isPending && mutation.variables?.type === "compose-create"}
+          progress={composeCreateProgress}
+          error={mutation.isError && mutation.variables?.type === "compose-create" ? mutation.error.message : undefined}
+          close={() => {
+            if (mutation.isPending && mutation.variables?.type === "compose-create") {
+              setComposeCreatorOpen(false);
+              setLocalNotice("Compose 创建任务正在后台执行");
+              return;
+            }
+            composeCreateAbortRef.current?.abort();
+            composeCreateAbortRef.current = undefined;
+            setComposeCreateProgress(undefined);
+            setComposeCreatorOpen(false);
+          }}
+          save={(value) => {
+            const controller = new AbortController();
+            composeCreateAbortRef.current?.abort();
+            composeCreateAbortRef.current = controller;
+            mutation.mutate({
+              type: "compose-create",
+              signal: controller.signal,
+              value: {
+                project_name: value.projectName,
+                working_dir: value.workingDirectory,
+                config_file_name: value.configFileName,
+                compose_content: value.composeContent,
+                build: value.build,
+              },
+            });
+          }}
+        />
+      ) : null}
       {editor ? (
         <DockerFormEditor
           key={`${editor.type}-${editor.key ?? "new"}`}
