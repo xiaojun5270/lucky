@@ -26,7 +26,7 @@ What happened instead?
 
 ## Environment
 
-- Platform: <!-- ios / android / web -->
+- Platform: <!-- ios / android -->
 - OS / Device:
 - App version / commit:
 - Node version:
