@@ -45,6 +45,7 @@ export async function listTunnels(kind: TunnelKind, signal?: AbortSignal) {
 export async function getTunnel(kind: TunnelKind, key: string, signal?: AbortSignal) {
   const raw = await luckyFetch(kind === 'stun' ? `/api/stun/${keyPath(key)}` : `/api/${kind}/list/${keyPath(key)}`, { signal });
   const value = tunnelData(raw, kind === 'stun' ? 'rule' : 'instance');
+  if (kind === 'stun') return { ...value, DiaglogShowMode: value.DiaglogShowMode || 'simple' };
   return kind === 'frp' ? { ...value, Proxies: value.Proxies ?? value.proxies ?? [], Visitors: value.Visitors ?? value.visitors ?? [] } : value;
 }
 export function saveTunnel(kind: TunnelKind, value: LuckyRecord, editing: boolean) {

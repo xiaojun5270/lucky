@@ -54,7 +54,7 @@ function EditorModal({ editor, save, close }: { editor: Editor; save: (value: Lu
   return <ScreenModal title={editor.title} close={close} busy={busy} footer={<Pressable disabled={busy} onPress={() => mutation.mutate()} style={{ height: 48, borderRadius: 12, backgroundColor: busy ? colors.disabled : colors.primary, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>{busy ? <ActivityIndicator color="#fff" /> : <Save size={17} color="#fff" />}<Text style={{ color: '#fff', fontWeight: '700' }}>{mutation.isPending ? '保存中' : editor.type === 'stun' && !editor.editing ? '创建并启用' : '保存'}</Text></Pressable>}>
     {error ? <ErrorState message={error} /> : null}
     <TunnelForm type={editor.type} value={value} onChange={setValue} disabled={busy} />
-    {(editor.type === 'stun' || editor.type === 'stun-settings') ? <Action icon={Webhook} label="测试 Webhook" disabled={busy} onPress={() => webhook.mutate()} /> : null}
+    {(editor.type === 'stun' || editor.type === 'stun-settings') && value.WebhookEnable ? <Action icon={Webhook} label="测试 Webhook" disabled={busy} onPress={() => webhook.mutate()} /> : null}
     {result ? <Text selectable style={{ color: colors.text, fontSize: 12, lineHeight: 18 }}>{result}</Text> : null}
   </ScreenModal>;
 }

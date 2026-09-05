@@ -10,16 +10,29 @@ export type TunnelFormType = TunnelKind | TunnelCollection | 'stun-settings';
 type Field = { key: string; label: string; type?: 'number' | 'switch' | 'lines' | 'multiline' | 'secret'; options?: string[]; required?: boolean; min?: number; max?: number };
 const field = (key: string, label: string, type?: Field['type'], extra: Partial<Field> = {}): Field => ({ key, label, type, ...extra });
 const port = (key: string, label: string, required = false) => field(key, label, 'number', { min: required ? 1 : 0, max: 65535, required });
-const webhookFields = [
-  field('WebhookEnable', '启用 Webhook', 'switch'), field('WebhookOnlyAddrChange', '仅地址变更时通知', 'switch'),
-  field('WebhookURL', 'Webhook 地址'), field('WebhookMethod', '请求方法', undefined, { options: ['get', 'post', 'put', 'patch'] }),
-  field('WebhookHeaders', '请求头', 'lines'), field('WebhookRequestBody', '请求内容', 'multiline'),
-  field('WebhookDisableCallbackSuccessContentCheck', '跳过响应内容检查', 'switch'), field('WebhookSuccessContent', '成功响应关键字', 'lines'),
-  field('WebhookProxy', '代理类型', undefined, { options: ['', 'http', 'https', 'socks5', 'dns'] }), field('WebhookProxyAddr', '代理地址'),
-  field('WebhookProxyUser', '代理账号'), field('WebhookProxyPassword', '代理密码', 'secret'),
-  field('RetryCount', '重试次数', 'number', { min: 0 }), field('RetryInterval', '重试间隔（毫秒）', 'number', { min: 0 }),
-];
 const webhookDefaults = { WebhookEnable: false, WebhookOnlyAddrChange: true, WebhookURL: '', WebhookMethod: 'post', WebhookHeaders: [], WebhookRequestBody: '', WebhookDisableCallbackSuccessContentCheck: true, WebhookSuccessContent: [], WebhookProxy: '', WebhookProxyAddr: '', WebhookProxyUser: '', WebhookProxyPassword: '', RetryCount: 0, RetryInterval: 500 };
+
+function webhookFields(value: LuckyRecord): Field[] {
+  if (!value.WebhookEnable) return [field('WebhookEnable', '启用 Webhook', 'switch')];
+  return [
+    field('WebhookEnable', '启用 Webhook', 'switch'),
+    field('WebhookOnlyAddrChange', '仅地址变更时通知', 'switch'),
+    field('WebhookURL', 'Webhook 地址', undefined, { required: true }),
+    field('WebhookMethod', '请求方法', undefined, { options: ['get', 'post', 'put', 'patch'], required: true }),
+    field('WebhookHeaders', '请求头', 'lines'),
+    ...(value.WebhookMethod === 'get' ? [] : [field('WebhookRequestBody', '请求内容', 'multiline')]),
+    field('RetryCount', '重试次数', 'number', { min: 0, max: 10 }),
+    ...(Number(value.RetryCount) > 0 ? [field('RetryInterval', '重试间隔（毫秒）', 'number', { min: 500, max: 10000 })] : []),
+    field('WebhookDisableCallbackSuccessContentCheck', '跳过响应内容检查', 'switch'),
+    ...(!value.WebhookDisableCallbackSuccessContentCheck ? [field('WebhookSuccessContent', '成功响应关键字', 'lines', { required: true })] : []),
+    field('WebhookProxy', '代理类型', undefined, { options: ['', 'http', 'https', 'socks5', 'dns'] }),
+    ...(value.WebhookProxy ? [
+      field('WebhookProxyAddr', '代理地址', undefined, { required: value.WebhookProxy !== 'dns' }),
+      field('WebhookProxyUser', '代理账号'),
+      field('WebhookProxyPassword', '代理密码', 'secret'),
+    ] : []),
+  ];
+}
 
 export function tunnelDefaults(type: TunnelFormType, mode?: string): LuckyRecord {
   if (type === 'stun-settings') return { EnableModule: true, GlobalStunServerList: [], ...webhookDefaults };
@@ -46,24 +59,87 @@ export function tunnelDefaults(type: TunnelFormType, mode?: string): LuckyRecord
 }
 
 function fields(type: TunnelFormType, value: LuckyRecord, advanced: boolean): Field[] {
-  if (type === 'stun-settings') return advanced ? webhookFields : [field('EnableModule', '启用 STUN 模块', 'switch'), field('GlobalStunServerList', '全局 STUN 服务器', 'lines')];
-  if (type === 'stun') return advanced ? [
-    field('AutoOptionsFirewall', '自动配置防火墙', 'switch'), field('NatPMP', 'NAT-PMP', 'switch'), field('NatPMPGateway', 'NAT-PMP 网关'),
-    field('UPnP', 'UPnP', 'switch'), field('UPnPGawayIP', 'UPnP 网关'), port('UPnPLocalPort', 'UPnP 本地端口'),
-    field('StunHeartbeatInterval', '心跳间隔（毫秒）', 'number', { min: 1 }), field('StunTimeout', 'STUN 超时（毫秒）', 'number', { min: 1 }),
-    field('StunRetryInterval', '重试间隔（毫秒）', 'number', { min: 1 }), field('StunAutoRetry', '自动重试', 'switch'),
-    field('DisableStunAvalidCheck', '跳过 STUN 有效性检查', 'switch'), field('TcpKeepAliveServerList', 'TCP 保活服务器', 'lines'),
-    field('GlobalWebhook', '使用全局 Webhook', 'switch'), ...webhookFields,
-    field('CallScript', '执行脚本', 'switch'), field('CallScriptContent', '脚本内容', 'multiline'),
-  ] : [field('Name', '规则名称', undefined, { required: true }), field('Enable', '启用规则', 'switch'),
-    field('StunType', '穿透协议', undefined, { options: ['tcp4', 'udp4'] }),
-    field('StunListenType', '监听方式', undefined, { options: ['ip', 'networkInterface'] }),
-    ...(value.StunListenType === 'ip' ? [field('ListenIP', '监听 IP（留空自动选择）')] : [field('SpecifyNetworkInterface', '网卡名称'), field('NetworkInterfaceReg', '地址匹配表达式')]),
-    port('ListenPort', '监听端口（0 为自动）'), field('DisablePortForward', '仅获取公网地址', 'switch'),
-    ...(!value.DisablePortForward ? [field('TargetAddressList', '目标地址', 'lines', { required: true }), port('TargetPort', '目标端口', true)] : []),
-    field('UseGlobalStunServerList', '使用全局 STUN 服务器', 'switch'),
-    ...(!value.UseGlobalStunServerList ? [field('StunServerList', 'STUN 服务器', 'lines', { required: true })] : []),
+  if (type === 'stun-settings') return advanced ? [] : [
+    field('EnableModule', '启用 STUN 模块', 'switch'),
+    field('GlobalStunServerList', '全局 STUN 服务器', 'lines'),
+    ...webhookFields(value),
   ];
+  if (type === 'stun') {
+    if (!advanced) return [
+      field('Name', '规则名称', undefined, { required: true }),
+      field('Enable', '启用规则', 'switch'),
+      field('DiaglogShowMode', '配置模式', undefined, { options: ['simple', 'diy'] }),
+      field('StunType', '穿透协议', undefined, { options: ['tcp4', 'udp4'] }),
+      port('ListenPort', '监听端口（0 为自动）'),
+      field('AutoOptionsFirewall', '自动配置防火墙', 'switch'),
+      field('UPnP', 'UPnP', 'switch'),
+      ...(value.UPnP ? [
+        field('UPnPGawayIP', 'UPnP 网关 IP'),
+        field('UPnpLocalHost', 'UPnP 客户端本地 IP'),
+        field('UpnPDiyControlAPIUrl', 'UPnP 控制接口地址'),
+      ] : []),
+      field('NatPMP', 'NAT-PMP', 'switch'),
+      ...(value.NatPMP ? [field('NatPMPGateway', 'NAT-PMP 网关')] : []),
+      ...((value.UPnP || value.NatPMP) && value.DisablePortForward ? [port('UPnPLocalPort', '映射的本地端口')] : []),
+      field('DisablePortForward', '仅获取公网地址', 'switch'),
+      ...(!value.DisablePortForward ? [
+        field('DisableStunAvalidCheck', '跳过 STUN 有效性检查', 'switch'),
+        field('TargetAddressList', '目标地址', 'lines', { required: true }),
+        port('TargetPort', '目标端口', true),
+      ] : []),
+      field('CallScript', '执行自定义脚本', 'switch'),
+      ...(value.CallScript ? [field('CallScriptContent', '脚本内容', 'multiline', { required: true })] : []),
+      field('GlobalWebhook', '使用全局 Webhook', 'switch'),
+      ...webhookFields(value),
+    ];
+    return [
+      field('Options.SafeMode', 'IP 过滤模式', undefined, { options: ['blacklist', 'globalblacklist', 'whitelist'] }),
+      ...(record(value.Options).SafeMode === 'whitelist' ? [field('AutoAddPubAddrWhiteList', '公网地址自动加入白名单', 'switch')] : []),
+      field('StunListenType', '监听方式', undefined, { options: ['ip', 'networkInterface'] }),
+      ...(value.StunListenType === 'ip' ? [field('ListenIP', '监听 IP（留空自动选择）')] : [
+        field('SpecifyNetworkInterface', '网卡名称'),
+        field('NetworkInterfaceReg', '地址匹配表达式'),
+      ]),
+      field('Options.DisableSelfForwardingCheck', '跳过自身转发检查', 'switch'),
+      ...(!value.DisablePortForward && value.StunType === 'tcp4' ? [
+        field('Options.SinglePortSpeedLimit', '单端口限速', 'switch'),
+        ...(record(value.Options).SinglePortSpeedLimit ? [
+          field('Options.SinglePortSendSpeedLimit', '单端口最大发送速度', 'number', { min: 30, max: 1000000 }),
+          field('Options.SinglePortReceSpeedLimit', '单端口最大接收速度', 'number', { min: 30, max: 1000000 }),
+        ] : []),
+        field('Options.SingleProxyMaxTCPConnections', '单端口最大 TCP 连接数', 'number', { min: 1, max: 1024 }),
+        field('Options.TCPListenTLS', '来源启用 TLS', 'switch'),
+        field('Options.TCPRelayTLS', '接收端启用 TLS', 'switch'),
+        ...(record(value.Options).TCPRelayTLS ? [
+          field('Options.TCPRelayTLSInsecureSkipVerify', '跳过 TLS 证书校验', 'switch'),
+          field('Options.TCPRelayTLSServerName', 'TLS 转发服务域名'),
+        ] : []),
+        field('Options.TCPStreamEncryptionSource', '来源流加密', 'switch'),
+        field('Options.TCPStreamEncryptionAccept', '接收端流加密', 'switch'),
+        ...(record(value.Options).TCPStreamEncryptionSource || record(value.Options).TCPStreamEncryptionAccept ? [field('Options.TCPStreamEncryptionKey', '流加密密钥', 'secret', { required: true })] : []),
+      ] : []),
+      ...(!value.DisablePortForward && value.StunType === 'udp4' ? [
+        field('Options.UDPSessionTimeout', 'UDP 会话超时（毫秒）', 'number', { min: 30, max: 300000 }),
+        field('Options.SingleProxyMaxUDPReadTargetDatagoroutineCount', '单端口最大 UDP 会话数', 'number', { min: 0, max: 32 }),
+        field('Options.UDPPacketSize', 'UDP 数据包最大长度', 'number', { min: 1, max: 65507 }),
+        field('Options.UDPShortMode', 'UDP 短连接模式', 'switch'),
+        field('Options.UDPPacketSourceEncryption', '来源数据包加密', 'switch'),
+        field('Options.UDPPacketAcceptEncryption', '接收端数据包加密', 'switch'),
+        ...(record(value.Options).UDPPacketSourceEncryption || record(value.Options).UDPPacketAcceptEncryption ? [field('Options.UDPPacketEncryptionKey', '数据包加密密钥', 'secret', { required: true })] : []),
+      ] : []),
+      field('UseGlobalStunServerList', '使用全局 STUN 服务器', 'switch'),
+      ...(!value.UseGlobalStunServerList ? [field('StunServerList', 'STUN 服务器', 'lines', { required: true })] : []),
+      ...(value.StunType === 'tcp4' ? [field('TcpKeepAliveServerList', 'TCP 保活服务器', 'lines')] : []),
+      field('StunTimeout', 'STUN 超时（毫秒）', 'number', { min: 1000, max: 10000 }),
+      field('StunHeartbeatInterval', '心跳检测间隔（毫秒）', 'number', { min: 1000, max: 10000 }),
+      field('StunRetryInterval', '穿透重试间隔（毫秒）', 'number', { min: 1000, max: 10000 }),
+      field('StunAutoRetry', '穿透失败自动重试', 'switch'),
+      field('LogLevel', '日志级别', 'number', { min: 0, max: 6 }),
+      field('LogOutputToConsole', '日志输出到终端', 'switch'),
+      field('AccessLogMaxNum', '最大访问日志数', 'number', { min: 0, max: 102400 }),
+      field('WebListShowLastLogMaxCount', '页面显示最新日志数', 'number', { min: 1, max: 64 }),
+    ];
+  }
   if (type === 'cloudflared') {
     if (advanced) return value.Type === 'access' ? [field('Params.HeaderList', '请求头', 'multiline'), field('Params.Destination', '目标地址'), field('Params.ConnectTo', '连接地址'), field('Params.UserAgent', 'User Agent')]
       : [field('Params.CFApiToken', 'Cloudflare API Token', 'secret'), field('Params.CFAccountId', '账户 ID'), field('Params.CFTunnelId', '隧道 ID'), field('Params.EdgeBindAddress', '边缘绑定地址'), field('Params.ICMPV4Src', 'ICMP IPv4 源地址'), field('Params.ICMPV6Src', 'ICMP IPv6 源地址')];
@@ -98,7 +174,12 @@ function set(value: LuckyRecord, key: string, next: unknown): LuckyRecord {
 }
 export function validateTunnelForm(type: TunnelFormType, value: LuckyRecord) {
   let result = value;
-  for (const f of [...fields(type, value, false), ...fields(type, value, true)]) {
+  const activeFields = type === 'stun'
+    ? [...fields(type, value, false), ...(value.DiaglogShowMode === 'diy' ? fields(type, value, true) : [])]
+    : type === 'stun-settings'
+      ? fields(type, value, false)
+      : [...fields(type, value, false), ...fields(type, value, true)];
+  for (const f of activeFields) {
     const v = get(result, f.key);
     if (f.required && (v == null || !String(v).trim() || (Array.isArray(v) && !v.some(x => String(x).trim())))) throw new Error(`请填写${f.label}`);
     if (f.type === 'number' && v !== undefined) {
@@ -113,7 +194,43 @@ export function validateTunnelForm(type: TunnelFormType, value: LuckyRecord) {
   if (type === 'frp' && ['kcp', 'quic'].includes(String(record(result.Params).Protocol))) result = set(result, 'Params.TCPMux', false);
   return result;
 }
-const optionLabels: Record<string, string> = { '': '无', client: '客户端', server: '服务端', tunnel: 'Tunnel 隧道', access: 'Access 访问', auto: '自动', ip: 'IP 地址', networkInterface: '指定网卡', tcp4: 'TCP / IPv4', udp4: 'UDP / IPv4' };
+const optionLabels: Record<string, string> = {
+  '': '无',
+  simple: '简易模式',
+  diy: '定制模式',
+  client: '客户端',
+  server: '服务端',
+  tunnel: 'Tunnel 隧道',
+  access: 'Access 访问',
+  auto: '自动',
+  ip: 'IP 地址',
+  networkInterface: '指定网卡',
+  tcp4: 'TCP / IPv4',
+  udp4: 'UDP / IPv4',
+  blacklist: '黑名单',
+  globalblacklist: '全局黑名单',
+  whitelist: '白名单',
+};
+
+export function updateTunnelFormValue(type: TunnelFormType, value: LuckyRecord, key: string, next: unknown) {
+  if (key === 'Type' && (type === 'frp' || type === 'cloudflared')) {
+    const defaults = tunnelDefaults(type, String(next));
+    return { ...value, Type: next, Params: { ...record(defaults.Params), ...record(value.Params) } };
+  }
+  let updated = set(value, key, next);
+  if (type !== 'stun') return updated;
+  const simple = updated.DiaglogShowMode !== 'diy';
+  if (key === 'AutoOptionsFirewall' && next === true) {
+    updated = { ...updated, DisablePortForward: false };
+  } else if (key === 'UPnP' && next === true) {
+    updated = { ...updated, NatPMP: false, ...(simple ? { AutoOptionsFirewall: false, DisablePortForward: false } : {}) };
+  } else if (key === 'NatPMP' && next === true) {
+    updated = { ...updated, UPnP: false, ...(simple ? { AutoOptionsFirewall: false, DisablePortForward: false } : {}) };
+  } else if (key === 'DisablePortForward' && next === true && simple) {
+    updated = { ...updated, UPnP: false, NatPMP: false, AutoOptionsFirewall: false };
+  }
+  return updated;
+}
 function FormField({ spec, value, onChange, disabled }: { spec: Field; value: unknown; onChange: (value: unknown) => void; disabled: boolean }) {
   const colors = useAppTheme();
   const [revealed, setRevealed] = useState(false);
@@ -128,20 +245,23 @@ export function TunnelForm({ type, value, onChange, disabled = false }: { type: 
   const [advanced, setAdvanced] = useState(false);
   const [extras, setExtras] = useState(false);
   function change(key: string, next: unknown) {
-    if (key === 'Type' && (type === 'frp' || type === 'cloudflared')) {
-      const defaults = tunnelDefaults(type, String(next));
-      onChange({ ...value, Type: next, Params: { ...record(defaults.Params), ...record(value.Params) } });
-    } else onChange(set(value, key, next));
+    onChange(updateTunnelFormValue(type, value, key, next));
   }
-  const shown = [...fields(type, value, false), ...(advanced ? fields(type, value, true) : [])]
+  const fixedMode = type === 'stun' || type === 'stun-settings';
+  const baseFields = fields(type, value, false)
     .filter(spec => !(type === 'stun' && !value.Key && spec.key === 'Enable'));
+  const customFields = type === 'stun' && value.DiaglogShowMode === 'diy' ? fields(type, value, true) : [];
+  const shownAdvancedFields = !fixedMode && advanced ? fields(type, value, true) : [];
   // Keep uncommon server fields editable without replacing the original configuration.
   const covered = new Set([...fields(type, value, false), ...fields(type, value, true)].map(f => f.key));
   const extra = Object.fromEntries(Object.entries(value).filter(([key]) => !covered.has(key) && !['Key', 'ret', 'msg', 'Proxies', 'Visitors', 'proxies', 'visitors'].includes(key)).map(([key, item]) => [key, item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(record(item)).filter(([child]) => !covered.has(`${key}.${child}`))) : item]));
   return <View style={{ gap: 15 }}>
-    {shown.map(spec => <FormField key={spec.key} spec={spec} value={get(value, spec.key)} onChange={next => change(spec.key, next)} disabled={disabled} />)}
-    <Pressable onPress={() => setAdvanced(!advanced)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}>{advanced ? <ChevronUp size={17} color={colors.primary} /> : <ChevronDown size={17} color={colors.primary} />}<Text style={{ color: colors.primary, fontSize: 13 }}>高级设置</Text></Pressable>
-    {advanced ? <><Pressable onPress={() => setExtras(!extras)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontSize: 12 }}>{extras ? '收起其他参数' : '其他参数'}</Text></Pressable>{extras ? <View pointerEvents={disabled ? 'none' : 'auto'}><StructuredForm value={extra} onChange={next => {
+    {baseFields.map(spec => <FormField key={spec.key} spec={spec} value={get(value, spec.key)} onChange={next => change(spec.key, next)} disabled={disabled} />)}
+    {customFields.length ? <View style={{ paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.rowBorder }}><Text style={{ color: colors.text, fontSize: 14, fontWeight: '700', paddingTop: 12 }}>定制模式参数</Text></View> : null}
+    {customFields.map(spec => <FormField key={spec.key} spec={spec} value={get(value, spec.key)} onChange={next => change(spec.key, next)} disabled={disabled} />)}
+    {!fixedMode ? <Pressable onPress={() => setAdvanced(!advanced)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}>{advanced ? <ChevronUp size={17} color={colors.primary} /> : <ChevronDown size={17} color={colors.primary} />}<Text style={{ color: colors.primary, fontSize: 13 }}>高级设置</Text></Pressable> : null}
+    {shownAdvancedFields.map(spec => <FormField key={spec.key} spec={spec} value={get(value, spec.key)} onChange={next => change(spec.key, next)} disabled={disabled} />)}
+    {!fixedMode && advanced ? <><Pressable onPress={() => setExtras(!extras)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.subtext, fontSize: 12 }}>{extras ? '收起其他参数' : '其他参数'}</Text></Pressable>{extras ? <View pointerEvents={disabled ? 'none' : 'auto'}><StructuredForm value={extra} onChange={next => {
       const merged = { ...value };
       for (const [key, previous] of Object.entries(extra)) {
         if (previous && typeof previous === 'object' && !Array.isArray(previous)) {
