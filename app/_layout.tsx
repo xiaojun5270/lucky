@@ -37,6 +37,7 @@ export default function RootLayout() {
           <Stack.Screen name="endpoints/[id]" options={{ title: '接口调试', headerBackTitle: '返回' }} />
           <Stack.Screen name="webservice" options={{ title: 'Web 服务', headerBackTitle: '返回' }} />
           <Stack.Screen name="docker" options={{ title: 'Docker', headerBackTitle: '返回' }} />
+          <Stack.Screen name="tunnels/[kind]" options={{ title: '内网穿透', headerBackTitle: '返回' }} />
         </Stack>}
     </QueryClientProvider>
   </GestureHandlerRootView>;
